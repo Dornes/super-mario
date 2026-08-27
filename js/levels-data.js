@@ -140,14 +140,12 @@ const LEVELS = [
     ],
   },
   {
-    // No boss yet - that's coming later. This level is just the checkpoint
-    // + end flag with a much harder, longer gauntlet: bigger gaps, more
-    // enemies, and two gaps wide enough that they require stomping a
-    // hovering flying enemy mid-air (which resets the double jump) to
-    // chain jumps across.
+    // Sy Loophole - a fast-talking, cut-rate lawyer in a cheap yellow suit.
+    // "Loophole Lunge": a yellow beater sedan barrels across the screen.
+    // "Sunroof Surprise": a comedic brown "surprise" drops from above.
     map: level4Map,
-    bossType: null,
-    bossName: null,
+    bossType: 'lawyer',
+    bossName: 'Sy Loophole',
     checkpointX: 5520,
     enemyPositions: [
       { x: 960, y: 440, range: 90 },

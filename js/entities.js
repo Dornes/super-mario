@@ -994,3 +994,239 @@ class Kamek {
   }
 }
 
+// LoopholeCar: the yellow beater sedan used in Sy Loophole's "Loophole
+// Lunge" attack. Zooms straight across the screen at the player and
+// despawns once it drives off the far side.
+class LoopholeCar {
+  constructor(x, y, dir) {
+    this.x = x;
+    this.y = y;
+    this.w = 90;
+    this.h = 42;
+    this.dir = dir;
+    this.vx = dir * 13;
+    this.dead = false;
+  }
+  update() {
+    this.x += this.vx;
+    if (this.x < camX - 300 || this.x > camX + canvas.width + 300) this.dead = true;
+  }
+  draw() {
+    const sx = this.x - camX;
+    if (sx < -150 || sx > canvas.width + 150) return;
+    // yellow beater sedan - keeping the original yellow color scheme
+    ctx.fillStyle = '#f2c229';
+    ctx.fillRect(sx, this.y + 10, this.w, this.h - 10);
+    ctx.fillStyle = '#d99e1f';
+    ctx.fillRect(sx + this.w * 0.2, this.y, this.w * 0.5, 16);
+    ctx.fillStyle = '#9fd8ff';
+    ctx.fillRect(sx + this.w * 0.24, this.y + 3, this.w * 0.42, 10);
+    ctx.fillStyle = '#222';
+    ctx.beginPath();
+    ctx.arc(sx + 18, this.y + this.h, 9, 0, Math.PI * 2);
+    ctx.arc(sx + this.w - 18, this.y + this.h, 9, 0, Math.PI * 2);
+    ctx.fill();
+    // motion lines trailing behind the direction of travel
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 3; i++) {
+      const lx = this.dir > 0 ? sx - 10 - i * 12 : sx + this.w + 10 + i * 12;
+      ctx.beginPath();
+      ctx.moveTo(lx, this.y + 12 + i * 8);
+      ctx.lineTo(lx - this.dir * 14, this.y + 12 + i * 8);
+      ctx.stroke();
+    }
+  }
+}
+
+// SunroofDrop: the comedic "Chicago Sunroof"-style gag projectile used in
+// Sy Loophole's second attack. Telegraphed at the player's position, then
+// falls from offscreen and splats harmlessly-but-humiliatingly on the ground.
+class SunroofDrop {
+  constructor(x, y) {
+    this.x = x;
+    this.y = y;
+    this.w = 24;
+    this.h = 24;
+    this.vy = 2;
+    this.dead = false;
+    this.landed = false;
+    this.splat = 0;
+  }
+  update() {
+    if (this.landed) {
+      this.splat--;
+      if (this.splat <= 0) this.dead = true;
+      return;
+    }
+    this.vy += GRAVITY * 0.7;
+    this.y += this.vy;
+    for (const t of solidTiles) {
+      if (rectsOverlap(this, t)) {
+        this.y = t.y - this.h;
+        this.landed = true;
+        this.splat = 26;
+        break;
+      }
+    }
+    if (this.y > canvas.height + 200) this.dead = true;
+  }
+  draw() {
+    const sx = this.x - camX;
+    if (sx < -60 || sx > canvas.width + 60) return;
+    if (this.landed) {
+      const p = this.splat / 26;
+      ctx.fillStyle = '#6b4a25';
+      ctx.beginPath();
+      ctx.ellipse(sx + this.w / 2, this.y + this.h - 4, (this.w * 0.9) * (1.4 - p), 6 * (1.4 - p), 0, 0, Math.PI * 2);
+      ctx.fill();
+      return;
+    }
+    ctx.fillStyle = '#6b4a25';
+    ctx.beginPath();
+    ctx.ellipse(sx + this.w / 2, this.y + this.h / 2, this.w / 2, this.h / 2, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#4a3216';
+    ctx.beginPath();
+    ctx.ellipse(sx + this.w / 2, this.y + 4, this.w * 0.35, this.h * 0.22, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+// Sy Loophole: the level 4 boss. A fast-talking, cut-rate lawyer in a
+// cheap yellow suit (an original character - not based on any copyrighted
+// likeness, though he keeps the yellow color scheme). He paces his turf
+// and alternates between two signature moves:
+//  - "Loophole Lunge": ducks out of sight and sends a yellow beater sedan
+//    barreling across the screen at Mario.
+//  - "Sunroof Surprise": telegraphs overhead, then drops a comedic brown
+//    "surprise" from off the top of the screen onto Mario's last position.
+// Like the other bosses he's only vulnerable to a stomp while idle/pacing.
+class LawyerBoss {
+  constructor(x, y) {
+    this.x = x;
+    this.y = y;
+    this.w = 46;
+    this.h = 80;
+    this.vx = 0.9;
+    this.vy = 0;
+    this.homeX = x;
+    this.homeY = y;
+    this.range = 80;
+    this.hp = 4;
+    this.maxHp = 4;
+    this.alive = true;
+    this.invuln = 0;
+    this.visible = true;
+    this.facing = -1;
+
+    this.state = 'idle'; // idle | lunge-warmup | lunge | sunroof-warmup
+    this.stateTimer = 0;
+    this.attackCooldown = 100;
+    this.nextAttack = 'lunge';
+    this.sunroofTargetX = x;
+  }
+  update() {
+    if (!this.alive) return;
+    this.vy += GRAVITY;
+    if (this.vy > 15) this.vy = 15;
+    this.x += this.vx;
+    this.y += this.vy;
+    for (const t of solidTiles) {
+      if (rectsOverlap(this, t)) {
+        if (this.vy > 0) { this.y = t.y - this.h; this.vy = 0; }
+        else if (this.vy < 0) { this.y = t.y + t.h; this.vy = 0; }
+      }
+    }
+    if (this.invuln > 0) this.invuln--;
+
+    const locked = this.state !== 'idle';
+    if (!locked) {
+      if (this.x < this.homeX - this.range || this.x > this.homeX + this.range) this.vx *= -1;
+      this.facing = this.vx < 0 ? -1 : 1;
+    }
+
+    if (this.state === 'idle') {
+      this.attackCooldown--;
+      if (this.attackCooldown <= 0) {
+        this.vx = 0;
+        this.facing = player.x < this.x ? -1 : 1;
+        if (this.nextAttack === 'lunge') {
+          this.state = 'lunge-warmup';
+          this.stateTimer = 34;
+        } else {
+          this.state = 'sunroof-warmup';
+          this.stateTimer = 46;
+          this.sunroofTargetX = player.x + player.w / 2 - 12;
+        }
+      }
+    } else if (this.state === 'lunge-warmup') {
+      this.stateTimer--;
+      // comedic flicker as he ducks in and out of view before the car peels out
+      this.visible = this.stateTimer % 8 >= 4;
+      if (this.stateTimer <= 0) {
+        this.visible = false;
+        const dir = player.x < this.x ? -1 : 1;
+        const startX = dir > 0 ? this.x - 60 : this.x + this.w + 60;
+        lawyerCars.push(new LoopholeCar(startX, this.y + this.h - 46, dir));
+        this.state = 'lunge';
+        this.stateTimer = 55;
+      }
+    } else if (this.state === 'lunge') {
+      this.stateTimer--;
+      if (this.stateTimer <= 0) {
+        this.visible = true;
+        this.state = 'idle';
+        this.attackCooldown = 150;
+        this.nextAttack = 'sunroof';
+      }
+    } else if (this.state === 'sunroof-warmup') {
+      this.stateTimer--;
+      if (this.stateTimer <= 0) {
+        sunroofDrops.push(new SunroofDrop(this.sunroofTargetX, -40));
+        this.state = 'idle';
+        this.attackCooldown = 170;
+        this.nextAttack = 'lunge';
+      }
+    }
+  }
+  draw() {
+    if (!this.alive) return;
+    const sx = this.x - camX;
+    if (sx < -100 || sx > canvas.width + 100) return;
+    if (this.invuln > 0 && Math.floor(this.invuln / 4) % 2 === 0) return;
+    if (!this.visible) return;
+
+    // cheap yellow suit jacket - keeping the original yellow color scheme
+    ctx.fillStyle = '#f2c229';
+    ctx.fillRect(sx, this.y + this.h * 0.3, this.w, this.h * 0.7);
+    ctx.fillStyle = '#3a3a3a';
+    ctx.fillRect(sx + this.w * 0.32, this.y + this.h * 0.32, this.w * 0.36, this.h * 0.5);
+    ctx.fillStyle = '#c0392b';
+    ctx.fillRect(sx + this.w * 0.46, this.y + this.h * 0.34, this.w * 0.08, this.h * 0.42);
+    ctx.fillStyle = '#e8b98a';
+    ctx.fillRect(sx + 8, this.y, this.w - 16, this.h * 0.34);
+    ctx.fillStyle = '#4a3320';
+    ctx.fillRect(sx + 6, this.y - 4, this.w - 12, this.h * 0.14);
+    ctx.fillStyle = '#111';
+    ctx.fillRect(sx + 10, this.y + this.h * 0.12, this.w - 20, 8);
+    ctx.fillStyle = 'white';
+    ctx.fillRect(sx + this.w * 0.28, this.y + this.h * 0.26, this.w * 0.44, 5);
+    ctx.fillStyle = '#7a4a20';
+    ctx.fillRect(sx + (this.facing > 0 ? this.w - 4 : -18), this.y + this.h * 0.62, 22, 18);
+
+    if (this.state === 'lunge-warmup') {
+      ctx.font = 'bold 22px sans-serif';
+      ctx.fillText('🚗💨', sx - 6, this.y - 16);
+    } else if (this.state === 'sunroof-warmup') {
+      ctx.font = 'bold 22px sans-serif';
+      ctx.fillText('💩⚠️', sx - 4, this.y - 16);
+    }
+
+    ctx.fillStyle = 'black';
+    ctx.fillRect(sx, this.y - 36, this.w, 8);
+    ctx.fillStyle = '#f2c229';
+    ctx.fillRect(sx, this.y - 36, this.w * (this.hp / this.maxHp), 8);
+  }
+}
+

@@ -175,6 +175,35 @@ let fireballs = [];
 let playerShots = [];
 let hammers = [];
 let deathParticles = [];
+let lawyerCars = [];
+let sunroofDrops = [];
+
+// Boss theme for Sy Loophole (level 4). Starts on the last 3 seconds of the
+// track the instant he spawns, then loops the full track from the top for
+// as long as he's alive.
+const bossMusic = new Audio('sounds/lawyer-boss-theme.mp3');
+bossMusic.addEventListener('ended', () => {
+  if (boss instanceof LawyerBoss && boss.alive) {
+    bossMusic.currentTime = 0;
+    bossMusic.play().catch(() => {});
+  }
+});
+function startBossMusic() {
+  bossMusic.pause();
+  const playNearEnd = () => {
+    bossMusic.currentTime = Math.max(0, (bossMusic.duration || 3) - 3);
+    bossMusic.play().catch(() => {});
+  };
+  if (bossMusic.readyState >= 1) {
+    playNearEnd();
+  } else {
+    bossMusic.addEventListener('loadedmetadata', playNearEnd, { once: true });
+  }
+}
+function stopBossMusic() {
+  bossMusic.pause();
+  bossMusic.currentTime = 0;
+}
 
 // spawns a short crumble-apart animation of small debris chunks at an
 // entity's position, using the given colors to roughly match its sprite
@@ -206,6 +235,7 @@ function crumbleColors(entity) {
   if (entity instanceof Bowser) return ['#3a8f3a', '#c46f2a', 'white'];
   if (entity instanceof KingBoo) return ['#f5f5f5', '#dedede', 'black'];
   if (entity instanceof Kamek) return ['#3a4fb0', '#e8d24a', '#c46f2a'];
+  if (entity instanceof LawyerBoss) return ['#f2c229', '#3a3a3a', '#e8b98a'];
   if (entity instanceof Player) return ['#e52521', '#0033cc', '#ffcc99'];
   return ['#999', '#666'];
 }
@@ -236,6 +266,8 @@ function initEnemies() {
   playerShots = [];
   hammers = [];
   deathParticles = [];
+  lawyerCars = [];
+  sunroofDrops = [];
   const groundY = (level.map.length - 1) * TILE;
   // Place the boss just before the flag. Levels with no bossType yet (e.g.
   // a level whose boss hasn't been designed) simply have no boss fight —
@@ -245,11 +277,18 @@ function initEnemies() {
       boss = new KingBoo(flagTile.x - 200, flagTile.y + flagTile.h - 160);
     } else if (level.bossType === 'kamek') {
       boss = new Kamek(flagTile.x - 190, groundY - 170);
+    } else if (level.bossType === 'lawyer') {
+      boss = new LawyerBoss(flagTile.x - 160, flagTile.y + flagTile.h - 80);
     } else {
       boss = new Bowser(flagTile.x - 150, flagTile.y + flagTile.h - 80);
     }
   } else {
     boss = null;
+  }
+  if (boss instanceof LawyerBoss) {
+    startBossMusic();
+  } else {
+    stopBossMusic();
   }
   // Checkpoint right before the boss — placed before any elevated platform
   // near the boss so it doesn't render underneath/inside one. Bossless
@@ -697,6 +736,7 @@ function checkBoss() {
         spawnCrumble(boss, crumbleColors(boss));
         score += 2000;
         updateHud();
+        if (boss instanceof LawyerBoss) stopBossMusic();
       }
     } else if (player.invuln === 0 && hittable) {
       player.invuln = 90;
@@ -712,6 +752,28 @@ function checkBoss() {
       f.dead = true;
       player.invuln = 90;
       player.vx = player.x < f.x ? -7 : 7;
+      player.vy = -6;
+      lives--;
+      updateHud();
+      if (lives <= 0) killPlayerGameOver();
+    }
+  }
+  for (const c of lawyerCars) {
+    if (!c.dead && player.invuln === 0 && rectsOverlap(player, c)) {
+      player.invuln = 90;
+      player.vx = player.x < c.x ? -7 : 7;
+      player.vy = -6;
+      lives--;
+      updateHud();
+      if (lives <= 0) killPlayerGameOver();
+    }
+  }
+  for (const d of sunroofDrops) {
+    if (!d.dead && !d.landed && player.invuln === 0 && rectsOverlap(player, d)) {
+      d.landed = true;
+      d.splat = 26;
+      player.invuln = 90;
+      player.vx = player.x < d.x ? -7 : 7;
       player.vy = -6;
       lives--;
       updateHud();
@@ -761,6 +823,7 @@ function checkPlayerShots() {
         if (boss.hp <= 0) {
           boss.alive = false;
           spawnCrumble(boss, crumbleColors(boss));
+          if (boss instanceof LawyerBoss) stopBossMusic();
         }
       }
     }
@@ -796,6 +859,10 @@ function loop() {
     if (boss) boss.update();
     for (const f of fireballs) f.update();
     fireballs = fireballs.filter(f => !f.dead);
+    for (const c of lawyerCars) c.update();
+    lawyerCars = lawyerCars.filter(c => !c.dead);
+    for (const d of sunroofDrops) d.update();
+    sunroofDrops = sunroofDrops.filter(d => !d.dead);
     for (const p of powerups) p.update();
     for (const s of playerShots) s.update();
     playerShots = playerShots.filter(s => !s.dead);
@@ -836,6 +903,8 @@ function loop() {
   for (const e of enemies) e.draw();
   if (boss) boss.draw();
   for (const f of fireballs) f.draw();
+  for (const c of lawyerCars) c.draw();
+  for (const d of sunroofDrops) d.draw();
   for (const s of playerShots) s.draw();
   for (const h of hammers) h.draw();
   for (const dp of deathParticles) {
