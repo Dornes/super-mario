@@ -1,0 +1,44 @@
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: #5c94fc;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    font-family: 'Courier New', monospace;
+    color: white;
+    overflow: hidden;
+  }
+  #hud {
+    display: flex;
+    gap: 30px;
+    padding: 10px;
+    font-size: 20px;
+    text-shadow: 2px 2px black;
+  }
+  canvas {
+    background: #5c94fc;
+    border: 4px solid #222;
+    image-rendering: pixelated;
+  }
+  #overlay {
+    position: absolute;
+    top: 45%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 40px;
+    text-shadow: 3px 3px black;
+    display: none;
+    text-align: center;
+  }
+  #hint {
+    font-size: 14px;
+    opacity: 0.8;
+    margin-top: 4px;
+    display: none;
+  }
+  #hintToggleLabel {
+    font-size: 12px;
+    opacity: 0.55;
+    margin-top: 4px;
+  }
