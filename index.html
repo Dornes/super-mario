@@ -41,6 +41,12 @@
     font-size: 14px;
     opacity: 0.8;
     margin-top: 4px;
+    display: none;
+  }
+  #hintToggleLabel {
+    font-size: 12px;
+    opacity: 0.55;
+    margin-top: 4px;
   }
 </style>
 </head>
@@ -53,6 +59,7 @@
   </div>
   <canvas id="game" width="800" height="520"></canvas>
   <div id="hint">Piltaster / A,D = bevege deg, Mellomrom / Pil opp = hopp (dobbelthopp!), Pil ned / S på et grønt rør = varp, R = restart. 1 = start av bane 1, 2 = teleporter til Bowser, 3 = start av bane 2, 4 = teleporter til King Boo, 5 = start av bane 3, 6 = teleporter til Kamek. Finn de skjulte rørene som leder til stjerner (+5000 poeng)! Slå på et "?"-blokk nedenfra for å finne en laserpistol - trykk W for å skyte (5 skudd)! Bane 1: beseire Bowser (pass på ildpusten hans på nært hold!). Bane 2: beseire King Boo! Bane 3: beseire Kamek (han teleporterer for å unngå hopp-angrep)!</div>
+  <div id="hintToggleLabel">Trykk I for hjelp</div>
   <div id="overlay"></div>
 
 <script>
@@ -70,6 +77,7 @@ const TILE = 40;
 let keys = {};
 let jumpPressed = false;
 let shootPressed = false;
+let hintVisible = false;
 const jumpKeys = ['Space', 'ArrowUp'];
 window.addEventListener('keydown', e => {
   if (!keys[e.code] && jumpKeys.includes(e.code)) jumpPressed = true;
@@ -87,6 +95,10 @@ window.addEventListener('keydown', e => {
     player.gunAmmo = 5;
     updateHud();
     showOverlayBrief('🔫 Ny laserpistol! 5 skudd!');
+  }
+  if (e.code === 'KeyI') {
+    hintVisible = !hintVisible;
+    document.getElementById('hint').style.display = hintVisible ? 'block' : 'none';
   }
 });
 window.addEventListener('keyup', e => keys[e.code] = false);
