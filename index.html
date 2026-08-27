@@ -58,7 +58,7 @@
     <div id="ammoRow" style="display:none;">🔫 Skudd: <span id="ammo">0</span></div>
   </div>
   <canvas id="game" width="800" height="520"></canvas>
-  <div id="hint">Piltaster / A,D = bevege deg (dobbelttrykk for å sprinte!), Mellomrom / Pil opp = hopp (dobbelthopp!), Pil ned / S på et grønt rør = varp, R = restart. 1 = start av bane 1, 2 = teleporter til Bowser, 3 = start av bane 2, 4 = teleporter til King Boo, 5 = start av bane 3, 6 = teleporter til Kamek. Finn de skjulte rørene som leder til stjerner (+5000 poeng)! Slå på et "?"-blokk nedenfra for å finne en laserpistol - trykk W for å skyte (5 skudd)! Bane 1: beseire Bowser (pass på ildpusten hans på nært hold!). Bane 2: beseire King Boo! Bane 3: beseire Kamek (han teleporterer for å unngå hopp-angrep)!</div>
+  <div id="hint">Piltaster / A,D = bevege deg (dobbelttrykk for å sprinte!), Mellomrom / Pil opp = hopp (dobbelthopp!), Pil ned / S på et grønt rør = varp, R = restart. 1 = start av bane 1, 2 = teleporter til Bowser, 3 = start av bane 2, 4 = teleporter til King Boo, 5 = start av bane 3, 6 = teleporter til Kamek. Finn de skjulte rørene som leder til stjerner (+5000 poeng)! Slå på et "?"-blokk nedenfra for å finne en laserpistol - trykk W for å skyte (5 skudd)! Bane 1: beseire Bowser (pass på ildpusten hans på nært hold!). Bane 2: beseire King Boo! Bane 3: beseire Kamek (han teleporterer for å unngå hopp-angrep)! Se opp for Hammer Bros som kaster hammere!</div>
   <div id="hintToggleLabel">Trykk I for hjelp</div>
   <div id="overlay"></div>
 
@@ -183,7 +183,7 @@ const LEVELS = [
     enemyPositions: [
       { x: 500, y: 440, range: 80 },
       { x: 900, y: 440, range: 100 },
-      { x: 1400, y: 440, range: 120 },
+      { x: 1400, y: 440, range: 120, type: 'hammerbro', throwEvery: 150 },
       { x: 2000, y: 200, range: 60 },
       { x: 2600, y: 440, range: 100 },
     ],
@@ -195,12 +195,12 @@ const LEVELS = [
     enemyPositions: [
       { x: 300, y: 440, range: 80 },
       { x: 650, y: 440, range: 100 },
-      { x: 950, y: 440, range: 90 },
+      { x: 950, y: 440, range: 90, type: 'hammerbro', throwEvery: 110 },
       { x: 1250, y: 200, range: 70 },
       { x: 1550, y: 440, range: 100 },
       { x: 1900, y: 440, range: 110 },
       { x: 2250, y: 200, range: 70 },
-      { x: 2600, y: 440, range: 100 },
+      { x: 2600, y: 440, range: 100, type: 'hammerbro', throwEvery: 110 },
       { x: 2950, y: 440, range: 120 },
       { x: 3300, y: 440, range: 90 },
     ],
@@ -211,15 +211,15 @@ const LEVELS = [
     bossName: 'Kamek',
     enemyPositions: [
       { x: 145, y: 440, range: 120 },
-      { x: 505, y: 440, range: 80 },
+      { x: 505, y: 440, range: 80, type: 'hammerbro', throwEvery: 80 },
       { x: 765, y: 440, range: 40 },
       { x: 1105, y: 280, range: 80 },
-      { x: 1505, y: 440, range: 120 },
+      { x: 1505, y: 440, range: 120, type: 'hammerbro', throwEvery: 80 },
       { x: 1885, y: 440, range: 80 },
       { x: 2605, y: 440, range: 120 },
       { x: 2985, y: 440, range: 80 },
       { x: 3305, y: 280, range: 80 },
-      { x: 3665, y: 440, range: 120 },
+      { x: 3665, y: 440, range: 120, type: 'hammerbro', throwEvery: 80 },
       { x: 4085, y: 280, range: 40 },
       { x: 4505, y: 440, range: 160 },
       { x: 4905, y: 440, range: 80 },
@@ -561,6 +561,86 @@ class Enemy {
     ctx.fillStyle = 'black';
     ctx.fillRect(sx + 6, this.y + 8, 3, 3);
     ctx.fillRect(sx + this.w - 8, this.y + 8, 3, 3);
+  }
+}
+
+class Hammer {
+  constructor(x, y, dir, speedMul) {
+    this.x = x;
+    this.y = y;
+    this.w = 16;
+    this.h = 16;
+    this.vx = dir * 3.6 * (speedMul || 1);
+    this.vy = -9;
+    this.rot = 0;
+    this.dead = false;
+  }
+  update() {
+    this.vy += GRAVITY * 0.45;
+    this.x += this.vx;
+    this.y += this.vy;
+    this.rot += 0.35;
+    for (const t of solidTiles) {
+      if (rectsOverlap(this, t)) {
+        this.dead = true;
+      }
+    }
+    if (this.y > canvas.height + 100 || this.x < camX - 300 || this.x > camX + canvas.width + 300) {
+      this.dead = true;
+    }
+  }
+  draw() {
+    const sx = this.x - camX;
+    if (sx < -50 || sx > canvas.width + 50) return;
+    ctx.save();
+    ctx.translate(sx + this.w / 2, this.y + this.h / 2);
+    ctx.rotate(this.rot);
+    ctx.fillStyle = '#8a5a2b';
+    ctx.fillRect(-2, -9, 4, 18);
+    ctx.fillStyle = '#8a8a8a';
+    ctx.fillRect(-9, -6, 18, 8);
+    ctx.strokeStyle = '#555';
+    ctx.strokeRect(-9, -6, 18, 8);
+    ctx.restore();
+  }
+}
+
+class HammerBro extends Enemy {
+  constructor(x, y, range, throwEvery) {
+    super(x, y, range);
+    this.w = 32;
+    this.h = 34;
+    this.vx = 0.5;
+    this.throwEvery = throwEvery || 120;
+    // stagger the first throw so several hammer bros don't fire in sync
+    this.throwTimer = Math.floor(Math.random() * this.throwEvery);
+  }
+  update() {
+    if (!this.alive) return;
+    super.update();
+    this.throwTimer++;
+    if (this.throwTimer >= this.throwEvery) {
+      this.throwTimer = 0;
+      const dir = player.x < this.x ? -1 : 1;
+      const speedMul = this.throwEvery <= 90 ? 1.3 : 1;
+      hammers.push(new Hammer(this.x + this.w / 2 - 8, this.y - 4, dir, speedMul));
+    }
+  }
+  draw() {
+    if (!this.alive) return;
+    const sx = this.x - camX;
+    if (sx < -50 || sx > canvas.width + 50) return;
+    // green shell body distinguishes it from a plain goomba
+    ctx.fillStyle = '#2e8b2e';
+    ctx.fillRect(sx, this.y + 10, this.w, this.h - 10);
+    ctx.fillStyle = '#8a5a2b';
+    ctx.fillRect(sx + 3, this.y, this.w - 6, 13);
+    ctx.fillStyle = 'white';
+    ctx.fillRect(sx + 5, this.y + 15, 6, 6);
+    ctx.fillRect(sx + this.w - 11, this.y + 15, 6, 6);
+    ctx.fillStyle = 'black';
+    ctx.fillRect(sx + 7, this.y + 17, 3, 3);
+    ctx.fillRect(sx + this.w - 9, this.y + 17, 3, 3);
   }
 }
 
@@ -1214,6 +1294,7 @@ let player = new Player();
 let enemies = [];
 let fireballs = [];
 let playerShots = [];
+let hammers = [];
 let boss = null;
 let checkpoint = null;
 let lives = 3;
@@ -1223,9 +1304,12 @@ let won = false;
 
 function initEnemies() {
   const level = LEVELS[currentLevelIndex];
-  enemies = level.enemyPositions.map(p => new Enemy(p.x, p.y, p.range));
+  enemies = level.enemyPositions.map(p => p.type === 'hammerbro'
+    ? new HammerBro(p.x, p.y, p.range, p.throwEvery)
+    : new Enemy(p.x, p.y, p.range));
   fireballs = [];
   playerShots = [];
+  hammers = [];
   const groundY = (level.map.length - 1) * TILE;
   // Place the boss just before the flag
   if (flagTile) {
@@ -1703,6 +1787,30 @@ function checkPlayerShots() {
         }
       }
     }
+    if (s.dead) continue;
+    for (const h of hammers) {
+      if (!h.dead && rectsOverlap(s, h)) {
+          h.dead = true;
+          s.dead = true;
+          score += 50;
+          updateHud();
+          break;
+      }
+    }
+  }
+}
+
+function checkHammers() {
+  for (const h of hammers) {
+    if (!h.dead && player.invuln === 0 && rectsOverlap(player, h)) {
+      h.dead = true;
+      player.invuln = 90;
+      player.vx = player.x < h.x ? -7 : 7;
+      player.vy = -6;
+      lives--;
+      updateHud();
+      if (lives <= 0) showOverlay('GAME OVER - trykk R for å starte på nytt');
+    }
   }
 }
 
@@ -1716,6 +1824,8 @@ function loop() {
     for (const p of powerups) p.update();
     for (const s of playerShots) s.update();
     playerShots = playerShots.filter(s => !s.dead);
+    for (const h of hammers) h.update();
+    hammers = hammers.filter(h => !h.dead);
     checkCoins();
     checkCheckpoint();
     checkPipeWarp();
@@ -1724,6 +1834,7 @@ function loop() {
     checkEnemies();
     checkBoss();
     checkPlayerShots();
+    checkHammers();
     checkWin();
 
     camX = player.x - canvas.width / 2 + player.w / 2;
@@ -1742,6 +1853,7 @@ function loop() {
   if (boss) boss.draw();
   for (const f of fireballs) f.draw();
   for (const s of playerShots) s.draw();
+  for (const h of hammers) h.draw();
   player.draw();
 
   requestAnimationFrame(loop);
