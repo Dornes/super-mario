@@ -412,6 +412,7 @@ class Player {
     // away shots the player already earned.
   }
   update() {
+    if (this.dead) return;
     const speed = this.sprinting ? 6.6 : 4.2;
     const accel = this.sprinting ? 0.9 : 0.6;
     if (keys['ArrowLeft'] || keys['KeyA']) {
@@ -485,6 +486,7 @@ class Player {
   die() {
     if (this.dead) return;
     this.dead = true;
+    spawnCrumble(this, crumbleColors(this));
     lives--;
     updateHud();
     if (lives <= 0) {
@@ -495,6 +497,7 @@ class Player {
     }
   }
   draw() {
+    if (this.dead) return;
     if (this.invuln > 0 && Math.floor(this.invuln / 4) % 2 === 0) return;
     const sx = this.x - camX;
     // body
@@ -1326,7 +1329,16 @@ function crumbleColors(entity) {
   if (entity instanceof Bowser) return ['#3a8f3a', '#c46f2a', 'white'];
   if (entity instanceof KingBoo) return ['#f5f5f5', '#dedede', 'black'];
   if (entity instanceof Kamek) return ['#3a4fb0', '#e8d24a', '#c46f2a'];
+  if (entity instanceof Player) return ['#e52521', '#0033cc', '#ffcc99'];
   return ['#999', '#666'];
+}
+
+// shared "final hit" path: hides Mario, bursts him into crumble debris,
+// and shows the game over overlay - used by every source of fatal damage
+function killPlayerGameOver() {
+  player.dead = true;
+  spawnCrumble(player, crumbleColors(player));
+  showOverlay('GAME OVER - trykk R for å starte på nytt');
 }
 let boss = null;
 let checkpoint = null;
@@ -1714,7 +1726,7 @@ function checkEnemies() {
         player.vy = -6;
         lives--;
         updateHud();
-        if (lives <= 0) showOverlay('GAME OVER - trykk R for å starte på nytt');
+        if (lives <= 0) killPlayerGameOver();
       }
     }
   }
@@ -1759,7 +1771,7 @@ function checkBoss() {
       player.vy = -6;
       lives--;
       updateHud();
-      if (lives <= 0) showOverlay('GAME OVER - trykk R for å starte på nytt');
+      if (lives <= 0) killPlayerGameOver();
     }
   }
   for (const f of fireballs) {
@@ -1770,7 +1782,7 @@ function checkBoss() {
       player.vy = -6;
       lives--;
       updateHud();
-      if (lives <= 0) showOverlay('GAME OVER - trykk R for å starte på nytt');
+      if (lives <= 0) killPlayerGameOver();
     }
   }
   if (boss.breathHitbox && player.invuln === 0 && rectsOverlap(player, boss.breathHitbox)) {
@@ -1779,7 +1791,7 @@ function checkBoss() {
     player.vy = -6;
     lives--;
     updateHud();
-    if (lives <= 0) showOverlay('GAME OVER - trykk R for å starte på nytt');
+    if (lives <= 0) killPlayerGameOver();
   }
 }
 
@@ -1839,7 +1851,7 @@ function checkHammers() {
       player.vy = -6;
       lives--;
       updateHud();
-      if (lives <= 0) showOverlay('GAME OVER - trykk R for å starte på nytt');
+      if (lives <= 0) killPlayerGameOver();
     }
   }
 }
