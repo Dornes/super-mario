@@ -371,18 +371,53 @@ function teleportToLevelStart(levelIdx) {
   showOverlayBrief('🚩 Teleportert til starten av bane ' + (levelIdx + 1) + '!');
 }
 
+// A few hand-designed cloud shapes (lists of [dx, dy, rx, ry] ellipse puffs,
+// relative to the cloud's center) so the sky doesn't just show one repeated
+// blob. Bigger and more clearly defined than the old single 3-puff cloud.
+const CLOUD_VARIANTS = [
+  // classic wide cloud
+  [[-46, 10, 34, 20], [0, -8, 40, 26], [46, 8, 34, 20], [14, 18, 26, 16]],
+  // long, stretched-out cloud
+  [[-62, 10, 28, 17], [-26, -8, 34, 22], [16, -4, 38, 24], [52, 8, 30, 18], [78, 16, 20, 13]],
+  // small, round, extra-puffy cloud with a bump on top
+  [[-30, 8, 28, 18], [0, -16, 26, 20], [30, 8, 28, 18], [0, 14, 22, 13]],
+];
+
+function drawCloud(cx, cy, scale, variant) {
+  const puffs = CLOUD_VARIANTS[variant % CLOUD_VARIANTS.length];
+  ctx.save();
+  ctx.translate(cx, cy);
+  if (scale !== 1) ctx.scale(scale, scale);
+  // soft shaded under-layer, offset slightly down/right, gives the cloud a
+  // bit of depth and a clearer silhouette against the sky
+  ctx.fillStyle = 'rgba(188,208,232,0.85)';
+  for (const [dx, dy, rx, ry] of puffs) {
+    ctx.beginPath();
+    ctx.ellipse(dx + 3, dy + 6, rx, ry, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // bright top puffs with a light outline so edges read clearly
+  ctx.fillStyle = 'rgba(255,255,255,0.97)';
+  ctx.strokeStyle = 'rgba(160,188,222,0.7)';
+  ctx.lineWidth = 2;
+  for (const [dx, dy, rx, ry] of puffs) {
+    ctx.beginPath();
+    ctx.ellipse(dx, dy, rx, ry, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 function drawBackground() {
   ctx.fillStyle = '#5c94fc';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-  // simple clouds
-  ctx.fillStyle = 'rgba(255,255,255,0.9)';
+  // clouds: bigger than before, cycling through a few distinct shapes/sizes
   for (let i = 0; i < 6; i++) {
     const cx = (i * 300 - camX * 0.3) % (levelWidth + 300);
-    ctx.beginPath();
-    ctx.ellipse(cx + 100, 60 + (i % 3) * 20, 30, 16, 0, 0, Math.PI * 2);
-    ctx.ellipse(cx + 130, 55 + (i % 3) * 20, 22, 14, 0, 0, Math.PI * 2);
-    ctx.ellipse(cx + 70, 55 + (i % 3) * 20, 22, 14, 0, 0, Math.PI * 2);
-    ctx.fill();
+    const variant = i % CLOUD_VARIANTS.length;
+    const scale = 1.1 + (i % 3) * 0.2;
+    drawCloud(cx + 100, 60 + (i % 3) * 20, scale, variant);
   }
   // Dark "void" band at the level of the main ground row, drawn behind the
   // tiles: solid ground tiles draw over it, but pits/gaps show this instead
