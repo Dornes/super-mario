@@ -53,7 +53,33 @@ const level3Map = [
 "11111111  111111 11111            11111111  1111111          111111111  111111          11111111            1111111111  111111       1111111111   11111111111111111111"
 ];
 
+// Level 4: no boss yet (that's for later) - just a much harder, longer
+// gauntlet. Gaps are bigger than level 3's and two of them ("stomp-chain"
+// gaps) are wider than a double jump can cross on its own: a flying enemy
+// hovers mid-gap so the player must jump onto it, bounce off (which resets
+// the double jump), and keep chaining jumps across. Every gap/enemy
+// position here was generated and validated against the player's actual
+// jump physics (see build_level4.js used to design this layout) so the
+// smaller gaps are plain sprint/double jumps and the two big ones are
+// reliably crossable via the stomp-bounce chain with normal input timing.
+const level4Map = [
+"                                                                                                                                                                          ",
+"                                                                                                                                                                          ",
+"                                                                                                                                                                          ",
+"                                                                                                                                                                          ",
+"                                                                                                                                                                          ",
+"                                                                                                                                                                          ",
+"                                                                                                                                                                    3     ",
+"                                       2 2 2                                                   2 2 2                                                                      ",
+"                     2 2 2                                  q               2 2 2                                                         2 2 2                           ",
+"    2 2 2                                               2 2 2                                                   2 2 2                                        2 2 2        ",
+"                        11                                                                       11                                           11                          ",
+"                                                                                                                                                                          ",
+"1111111111111111   1111111111111    11111111111111   111111111111       111111111111111     1111111111111    1111111111111111          11111111111111   111111111111111111"
+];
+
 const LEVELS = [
+
   {
     map: level1Map,
     bossType: 'bowser',
@@ -111,6 +137,42 @@ const LEVELS = [
       { x: 4300, y: 300, range: 200, type: 'flying' },
       { x: 1750, y: 300, range: 180, type: 'flying-hammerbro' },
       { x: 4750, y: 300, range: 180, type: 'flying-hammerbro' },
+    ],
+  },
+  {
+    // No boss yet - that's coming later. This level is just the checkpoint
+    // + end flag with a much harder, longer gauntlet: bigger gaps, more
+    // enemies, and two gaps wide enough that they require stomping a
+    // hovering flying enemy mid-air (which resets the double jump) to
+    // chain jumps across.
+    map: level4Map,
+    bossType: null,
+    bossName: null,
+    checkpointX: 5520,
+    enemyPositions: [
+      { x: 960, y: 440, range: 90 },
+      { x: 1120, y: 440, range: 60, type: 'hammerbro' },
+      { x: 1680, y: 440, range: 100 },
+      { x: 1840, y: 440, range: 70 },
+      { x: 2320, y: 440, range: 110, type: 'hammerbro' },
+      { x: 2480, y: 440, range: 60 },
+      { x: 2720, y: 440, range: 24, type: 'flying' },
+      { x: 5120, y: 440, range: 24, type: 'flying' },
+      { x: 5240, y: 440, range: 24, type: 'flying' },
+      { x: 3120, y: 440, range: 100 },
+      { x: 3280, y: 440, range: 60, type: 'hammerbro' },
+      { x: 3840, y: 440, range: 90 },
+      { x: 4000, y: 440, range: 70 },
+      { x: 4560, y: 440, range: 100, type: 'hammerbro' },
+      { x: 4720, y: 440, range: 60 },
+      { x: 4880, y: 440, range: 90 },
+      { x: 5560, y: 440, range: 100 },
+      { x: 5840, y: 440, range: 70, type: 'hammerbro' },
+      { x: 6280, y: 440, range: 90 },
+      { x: 6480, y: 440, range: 60 },
+      { x: 1760, y: 260, range: 180, type: 'flying' },
+      { x: 4640, y: 280, range: 200, type: 'flying-hammerbro' },
+      { x: 6240, y: 260, range: 180, type: 'flying' },
     ],
   },
 ];

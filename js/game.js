@@ -237,8 +237,10 @@ function initEnemies() {
   hammers = [];
   deathParticles = [];
   const groundY = (level.map.length - 1) * TILE;
-  // Place the boss just before the flag
-  if (flagTile) {
+  // Place the boss just before the flag. Levels with no bossType yet (e.g.
+  // a level whose boss hasn't been designed) simply have no boss fight —
+  // reaching the flag clears the level immediately.
+  if (flagTile && level.bossType) {
     if (level.bossType === 'kingboo') {
       boss = new KingBoo(flagTile.x - 200, flagTile.y + flagTile.h - 160);
     } else if (level.bossType === 'kamek') {
@@ -250,9 +252,16 @@ function initEnemies() {
     boss = null;
   }
   // Checkpoint right before the boss — placed before any elevated platform
-  // near the boss so it doesn't render underneath/inside one.
-  checkpoint = boss ? {
-    x: computeCheckpointX(boss.homeX, groundY),
+  // near the boss so it doesn't render underneath/inside one. Bossless
+  // levels use an explicit checkpointX from the level config instead.
+  let checkpointX = null;
+  if (boss) {
+    checkpointX = computeCheckpointX(boss.homeX, groundY);
+  } else if (flagTile && level.checkpointX != null) {
+    checkpointX = level.checkpointX;
+  }
+  checkpoint = checkpointX != null ? {
+    x: checkpointX,
     y: groundY - 90,
     w: 14,
     h: 90,
@@ -353,7 +362,11 @@ function teleportToBoss(levelIdx) {
   camX = Math.max(0, Math.min(spawnPoint.x - canvas.width / 2, levelWidth - canvas.width));
   overlay.style.display = 'none';
   updateHud();
-  showOverlayBrief('👑 Teleportert til sjefsfighten på bane ' + (levelIdx + 1) + '!');
+  if (boss) {
+    showOverlayBrief('👑 Teleportert til sjefsfighten på bane ' + (levelIdx + 1) + '!');
+  } else {
+    showOverlayBrief('🚩 Teleportert til sjekkpunktet på bane ' + (levelIdx + 1) + '!');
+  }
 }
 
 function teleportToLevelStart(levelIdx) {
@@ -658,7 +671,12 @@ function checkWin() {
     won = true;
     score += 1000;
     updateHud();
-    showOverlay('🎉 Du beseiret ' + LEVELS[currentLevelIndex].bossName + ' og vant hele spillet! Poeng: ' + score + '  (trykk R for å spille igjen)');
+    const bossName = LEVELS[currentLevelIndex].bossName;
+    if (bossName) {
+      showOverlay('🎉 Du beseiret ' + bossName + ' og vant hele spillet! Poeng: ' + score + '  (trykk R for å spille igjen)');
+    } else {
+      showOverlay('🏁 Bane ' + (currentLevelIndex + 1) + ' fullført! Poeng: ' + score + '  (trykk R for å spille igjen)');
+    }
   }
 }
 
