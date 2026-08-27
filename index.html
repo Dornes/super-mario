@@ -1294,6 +1294,40 @@ let enemies = [];
 let fireballs = [];
 let playerShots = [];
 let hammers = [];
+let deathParticles = [];
+
+// spawns a short crumble-apart animation of small debris chunks at an
+// entity's position, using the given colors to roughly match its sprite
+function spawnCrumble(entity, colors) {
+  const cx = entity.x + entity.w / 2;
+  const cy = entity.y + entity.h / 2;
+  const count = Math.min(28, Math.max(10, Math.round((entity.w * entity.h) / 150)));
+  for (let i = 0; i < count; i++) {
+    const ang = Math.random() * Math.PI * 2;
+    const speed = 0.8 + Math.random() * 2.4;
+    deathParticles.push({
+      x: cx + (Math.random() - 0.5) * entity.w * 0.6,
+      y: cy + (Math.random() - 0.5) * entity.h * 0.6,
+      vx: Math.cos(ang) * speed,
+      vy: -Math.random() * 3 - 1.5,
+      size: 3 + Math.random() * 4,
+      rot: Math.random() * Math.PI * 2,
+      vrot: (Math.random() - 0.5) * 0.5,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      life: 22 + Math.floor(Math.random() * 10),
+      maxLife: 30
+    });
+  }
+}
+
+function crumbleColors(entity) {
+  if (entity instanceof HammerBro) return ['#2e8b2e', '#8a5a2b', 'white'];
+  if (entity instanceof Enemy) return ['#7b4a12', 'white', 'black'];
+  if (entity instanceof Bowser) return ['#3a8f3a', '#c46f2a', 'white'];
+  if (entity instanceof KingBoo) return ['#f5f5f5', '#dedede', 'black'];
+  if (entity instanceof Kamek) return ['#3a4fb0', '#e8d24a', '#c46f2a'];
+  return ['#999', '#666'];
+}
 let boss = null;
 let checkpoint = null;
 let lives = 3;
@@ -1309,6 +1343,7 @@ function initEnemies() {
   fireballs = [];
   playerShots = [];
   hammers = [];
+  deathParticles = [];
   const groundY = (level.map.length - 1) * TILE;
   // Place the boss just before the flag
   if (flagTile) {
@@ -1668,6 +1703,7 @@ function checkEnemies() {
       const falling = player.vy > 0 && (player.y + player.h) - e.y < 20;
       if (falling) {
         e.alive = false;
+        spawnCrumble(e, crumbleColors(e));
         player.vy = -9;
         player.jumpsUsed = 0;
         score += 200;
@@ -1713,6 +1749,7 @@ function checkBoss() {
       updateHud();
       if (boss.hp <= 0) {
         boss.alive = false;
+        spawnCrumble(boss, crumbleColors(boss));
         score += 2000;
         updateHud();
       }
@@ -1765,6 +1802,7 @@ function checkPlayerShots() {
     for (const e of enemies) {
       if (e.alive && rectsOverlap(s, e)) {
         e.alive = false;
+        spawnCrumble(e, crumbleColors(e));
         s.dead = true;
         break;
       }
@@ -1777,6 +1815,7 @@ function checkPlayerShots() {
         s.dead = true;
         if (boss.hp <= 0) {
           boss.alive = false;
+          spawnCrumble(boss, crumbleColors(boss));
         }
       }
     }
@@ -1833,6 +1872,15 @@ function loop() {
     if (camX > levelWidth - canvas.width) camX = levelWidth - canvas.width;
   }
 
+  for (const dp of deathParticles) {
+    dp.vy += GRAVITY * 0.4;
+    dp.x += dp.vx;
+    dp.y += dp.vy;
+    dp.rot += dp.vrot;
+    dp.life--;
+  }
+  deathParticles = deathParticles.filter(dp => dp.life > 0);
+
   drawBackground();
   drawTiles();
   drawCoins();
@@ -1845,6 +1893,17 @@ function loop() {
   for (const f of fireballs) f.draw();
   for (const s of playerShots) s.draw();
   for (const h of hammers) h.draw();
+  for (const dp of deathParticles) {
+    const sx = dp.x - camX;
+    if (sx < -30 || sx > canvas.width + 30) continue;
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, dp.life / dp.maxLife);
+    ctx.translate(sx, dp.y);
+    ctx.rotate(dp.rot);
+    ctx.fillStyle = dp.color;
+    ctx.fillRect(-dp.size / 2, -dp.size / 2, dp.size, dp.size);
+    ctx.restore();
+  }
   player.draw();
 
   requestAnimationFrame(loop);
