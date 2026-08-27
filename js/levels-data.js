@@ -64,6 +64,7 @@ const LEVELS = [
       { x: 1400, y: 440, range: 120, type: 'hammerbro' },
       { x: 2000, y: 200, range: 60 },
       { x: 2600, y: 440, range: 100 },
+      { x: 1650, y: 300, range: 150, type: 'flying' },
     ],
   },
   {
@@ -81,6 +82,9 @@ const LEVELS = [
       { x: 2600, y: 440, range: 100, type: 'hammerbro' },
       { x: 2950, y: 440, range: 120 },
       { x: 3300, y: 440, range: 90 },
+      { x: 800, y: 300, range: 160, type: 'flying' },
+      { x: 2450, y: 320, range: 160, type: 'flying' },
+      { x: 3100, y: 300, range: 150, type: 'flying-hammerbro' },
     ],
   },
   {
@@ -102,6 +106,11 @@ const LEVELS = [
       { x: 4505, y: 440, range: 160 },
       { x: 4905, y: 440, range: 80 },
       { x: 5505, y: 440, range: 160 },
+      { x: 950, y: 300, range: 200, type: 'flying' },
+      { x: 2200, y: 320, range: 200, type: 'flying' },
+      { x: 4300, y: 300, range: 200, type: 'flying' },
+      { x: 1750, y: 300, range: 180, type: 'flying-hammerbro' },
+      { x: 4750, y: 300, range: 180, type: 'flying-hammerbro' },
     ],
   },
 ];

@@ -168,14 +168,85 @@ class Enemy {
     if (!this.alive) return;
     const sx = this.x - camX;
     if (sx < -50 || sx > canvas.width + 50) return;
-    ctx.fillStyle = '#7b4a12';
-    ctx.fillRect(sx, this.y, this.w, this.h);
-    ctx.fillStyle = 'white';
-    ctx.fillRect(sx + 4, this.y + 6, 6, 6);
-    ctx.fillRect(sx + this.w - 10, this.y + 6, 6, 6);
-    ctx.fillStyle = 'black';
-    ctx.fillRect(sx + 6, this.y + 8, 3, 3);
-    ctx.fillRect(sx + this.w - 8, this.y + 8, 3, 3);
+    drawGoombaBody(sx, this.y, this.w, this.h);
+  }
+}
+
+// Shared sprite pieces so the flying variants can reuse the exact same
+// body art as their ground-based counterparts and just add wings.
+function drawGoombaBody(sx, y, w, h) {
+  ctx.fillStyle = '#7b4a12';
+  ctx.fillRect(sx, y, w, h);
+  ctx.fillStyle = 'white';
+  ctx.fillRect(sx + 4, y + 6, 6, 6);
+  ctx.fillRect(sx + w - 10, y + 6, 6, 6);
+  ctx.fillStyle = 'black';
+  ctx.fillRect(sx + 6, y + 8, 3, 3);
+  ctx.fillRect(sx + w - 8, y + 8, 3, 3);
+}
+
+function drawHammerBroBody(sx, y, w, h) {
+  ctx.fillStyle = '#2e8b2e';
+  ctx.fillRect(sx, y + 10, w, h - 10);
+  ctx.fillStyle = '#8a5a2b';
+  ctx.fillRect(sx + 3, y, w - 6, 13);
+  ctx.fillStyle = 'white';
+  ctx.fillRect(sx + 5, y + 15, 6, 6);
+  ctx.fillRect(sx + w - 11, y + 15, 6, 6);
+  ctx.fillStyle = 'black';
+  ctx.fillRect(sx + 7, y + 17, 3, 3);
+  ctx.fillRect(sx + w - 9, y + 17, 3, 3);
+}
+
+// Draws a simple pair of flapping wings beside a body, driven by
+// wingPhase (radians, incremented every frame by the caller).
+function drawFlapWings(sx, y, w, h, wingPhase, fillColor, strokeColor) {
+  const flap = Math.sin(wingPhase);
+  const lift = flap * 6;
+  const midY = y + h * 0.4;
+  ctx.fillStyle = fillColor;
+  ctx.strokeStyle = strokeColor;
+  ctx.beginPath();
+  ctx.moveTo(sx + 2, midY);
+  ctx.lineTo(sx - 12, midY - 6 - lift);
+  ctx.lineTo(sx + 2, midY + 9);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(sx + w - 2, midY);
+  ctx.lineTo(sx + w + 12, midY - 6 - lift);
+  ctx.lineTo(sx + w - 2, midY + 9);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+}
+
+// Flying goomba: hovers and bobs gently instead of falling, patrolling
+// back and forth over its range just like the regular Enemy.
+class FlyingEnemy extends Enemy {
+  constructor(x, y, range) {
+    super(x, y, range);
+    this.baseY = y;
+    this.vx = 1.4;
+    this.flying = true;
+    this.wingPhase = Math.random() * Math.PI * 2;
+  }
+  update() {
+    if (!this.alive) return;
+    this.x += this.vx;
+    this.wingPhase += 0.3;
+    this.y = this.baseY + Math.sin(this.wingPhase * 0.5) * 10;
+    if (this.x < this.startX - this.range || this.x > this.startX + this.range) {
+      this.vx *= -1;
+    }
+  }
+  draw() {
+    if (!this.alive) return;
+    const sx = this.x - camX;
+    if (sx < -50 || sx > canvas.width + 50) return;
+    drawFlapWings(sx, this.y, this.w, this.h, this.wingPhase, '#eaeaea', '#999');
+    drawGoombaBody(sx, this.y, this.w, this.h);
   }
 }
 
@@ -244,17 +315,41 @@ class HammerBro extends Enemy {
     if (!this.alive) return;
     const sx = this.x - camX;
     if (sx < -50 || sx > canvas.width + 50) return;
-    // green shell body distinguishes it from a plain goomba
-    ctx.fillStyle = '#2e8b2e';
-    ctx.fillRect(sx, this.y + 10, this.w, this.h - 10);
-    ctx.fillStyle = '#8a5a2b';
-    ctx.fillRect(sx + 3, this.y, this.w - 6, 13);
-    ctx.fillStyle = 'white';
-    ctx.fillRect(sx + 5, this.y + 15, 6, 6);
-    ctx.fillRect(sx + this.w - 11, this.y + 15, 6, 6);
-    ctx.fillStyle = 'black';
-    ctx.fillRect(sx + 7, this.y + 17, 3, 3);
-    ctx.fillRect(sx + this.w - 9, this.y + 17, 3, 3);
+    drawHammerBroBody(sx, this.y, this.w, this.h);
+  }
+}
+
+// Flying Hammer Bro: same throwing behavior as HammerBro, but hovers and
+// bobs like FlyingEnemy instead of falling/standing on the ground.
+class FlyingHammerBro extends HammerBro {
+  constructor(x, y, range) {
+    super(x, y, range);
+    this.baseY = y;
+    this.vx = 1.0;
+    this.flying = true;
+    this.wingPhase = Math.random() * Math.PI * 2;
+  }
+  update() {
+    if (!this.alive) return;
+    this.x += this.vx;
+    this.wingPhase += 0.26;
+    this.y = this.baseY + Math.sin(this.wingPhase * 0.5) * 10;
+    if (this.x < this.startX - this.range || this.x > this.startX + this.range) {
+      this.vx *= -1;
+    }
+    this.throwTimer++;
+    if (this.throwTimer >= this.throwEvery) {
+      this.throwTimer = 0;
+      const dir = player.x < this.x ? -1 : 1;
+      hammers.push(new Hammer(this.x + this.w / 2 - 8, this.y - 4, dir));
+    }
+  }
+  draw() {
+    if (!this.alive) return;
+    const sx = this.x - camX;
+    if (sx < -50 || sx > canvas.width + 50) return;
+    drawFlapWings(sx, this.y, this.w, this.h, this.wingPhase, '#cfe8cf', '#8ab08a');
+    drawHammerBroBody(sx, this.y, this.w, this.h);
   }
 }
 

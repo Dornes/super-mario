@@ -226,9 +226,12 @@ let won = false;
 
 function initEnemies() {
   const level = LEVELS[currentLevelIndex];
-  enemies = level.enemyPositions.map(p => p.type === 'hammerbro'
-    ? new HammerBro(p.x, p.y, p.range)
-    : new Enemy(p.x, p.y, p.range));
+  enemies = level.enemyPositions.map(p => {
+    if (p.type === 'hammerbro') return new HammerBro(p.x, p.y, p.range);
+    if (p.type === 'flying') return new FlyingEnemy(p.x, p.y, p.range);
+    if (p.type === 'flying-hammerbro') return new FlyingHammerBro(p.x, p.y, p.range);
+    return new Enemy(p.x, p.y, p.range);
+  });
   fireballs = [];
   playerShots = [];
   hammers = [];
