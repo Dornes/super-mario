@@ -49,9 +49,10 @@
     <div>❤️ Liv: <span id="lives">3</span></div>
     <div>⭐ Poeng: <span id="score">0</span></div>
     <div>🪙 Mynter: <span id="coins">0</span></div>
+    <div id="ammoRow" style="display:none;">🔫 Skudd: <span id="ammo">0</span></div>
   </div>
   <canvas id="game" width="800" height="520"></canvas>
-  <div id="hint">Piltaster / A,D = bevege deg, Mellomrom / W / Pil opp = hopp (dobbelthopp!), Pil ned / S på et grønt rør = varp, R = restart. 1 = start av bane 1, 2 = teleporter til Bowser, 3 = start av bane 2, 4 = teleporter til King Boo, 5 = start av bane 3, 6 = teleporter til Kamek. Finn de skjulte rørene som leder til stjerner (+5000 poeng)! Bane 1: beseire Bowser (pass på ildpusten hans på nært hold!). Bane 2: beseire King Boo! Bane 3: beseire Kamek (han teleporterer for å unngå hopp-angrep)!</div>
+  <div id="hint">Piltaster / A,D = bevege deg, Mellomrom / Pil opp = hopp (dobbelthopp!), Pil ned / S på et grønt rør = varp, R = restart. 1 = start av bane 1, 2 = teleporter til Bowser, 3 = start av bane 2, 4 = teleporter til King Boo, 5 = start av bane 3, 6 = teleporter til Kamek. Finn de skjulte rørene som leder til stjerner (+5000 poeng)! Slå på et "?"-blokk nedenfra for å finne en laserpistol - trykk W for å skyte (5 skudd)! Bane 1: beseire Bowser (pass på ildpusten hans på nært hold!). Bane 2: beseire King Boo! Bane 3: beseire Kamek (han teleporterer for å unngå hopp-angrep)!</div>
   <div id="overlay"></div>
 
 <script>
@@ -68,9 +69,11 @@ const TILE = 40;
 
 let keys = {};
 let jumpPressed = false;
-const jumpKeys = ['Space', 'ArrowUp', 'KeyW'];
+let shootPressed = false;
+const jumpKeys = ['Space', 'ArrowUp'];
 window.addEventListener('keydown', e => {
   if (!keys[e.code] && jumpKeys.includes(e.code)) jumpPressed = true;
+  if (!keys[e.code] && e.code === 'KeyW') shootPressed = true;
   keys[e.code] = true;
   if (e.code === 'KeyR') restart();
   if (e.code === 'Digit1') teleportToLevelStart(0);
@@ -95,7 +98,7 @@ const level1Map = [
 "                                  111111111                                                    3    ",
 "                                                          1                                    3    ",
 "      2 2                          1                                       44                      ",
-"    111111        2 2 2       1                    2      11              44                       ",
+"    111111    q   2 2 2       1              q     2      11              44                       ",
 "111111111111  11111111111111111111111111  111111111  11111111111111111111  111111  11111111111111111"
 ];
 
@@ -111,7 +114,7 @@ const level2Map = [
 "         2 2                       22                     1111                          2 2                                   3   ",
 "        1111                      1111                                                  1111                                  3   ",
 "                            44                                    44                                        44                    ",
-"                            44                                    44                                        44                    ",
+"              q             44   q                                44                                        44                    ",
 "111111111111111  11111111111111111111111  11111111  11111111111111111111111  1111111111111  1111111  11111111111111111111111111111"
 ];
 
@@ -131,7 +134,7 @@ const level3Map = [
 "                         111111                                                 111111             111111                                                          3  ",
 "                        1      1                   11 11 11                                       1      1                                                            ",
 "2 2 2 2   2 2 2        1        1 2 2 2 2                    2 2 2 2 2                  2 2 2 2  1        1 2 2 2 2 2         1 1 1  2 2 2 2 2                        ",
-"                      1          1                                                              1          1                                     1                    ",
+"                  q   1          1            q                                                 1          1                                     1                    ",
 "11111111  111111 11111            11111111  1111111          111111111  111111          11111111            1111111111  111111       1111111111   11111111111111111111"
 ];
 
@@ -198,6 +201,7 @@ let levelWidth = 0;
 let stars = [];
 let pipeWarps = [];
 let warpCooldown = 0;
+let powerups = [];
 
 function buildLevel() {
   coinTiles = [];
@@ -206,6 +210,7 @@ function buildLevel() {
   stars = [];
   pipeWarps = [];
   warpCooldown = 0;
+  powerups = [];
   const levelMap = LEVELS[currentLevelIndex].map;
   levelWidth = levelMap[0].length * TILE;
   let flagCol = null;
@@ -216,6 +221,8 @@ function buildLevel() {
       const y = row * TILE;
       if (ch === '1' || ch === '4') {
         solidTiles.push({x, y, w: TILE, h: TILE, pipe: ch === '4'});
+      } else if (ch === 'q') {
+        solidTiles.push({x, y, w: TILE, h: TILE, pipe: false, itemBlock: true, used: false});
       } else if (ch === '2') {
         coinTiles.push({x: x + 8, y: y + 8, w: 24, h: 24, taken: false});
       } else if (ch === '3') {
@@ -361,6 +368,7 @@ class Player {
     this.dead = false;
     this.invuln = 0;
     this.jumpsUsed = 0;
+    this.gunAmmo = 0;
   }
   update() {
     const speed = 4.2;
@@ -383,6 +391,14 @@ class Player {
       this.jumpsUsed++;
     }
     jumpPressed = false;
+
+    if (shootPressed && this.gunAmmo > 0) {
+      this.gunAmmo--;
+      updateHud();
+      const shotX = this.facing > 0 ? this.x + this.w : this.x - 16;
+      playerShots.push(new LaserShot(shotX, this.y + this.h * 0.55, this.facing));
+    }
+    shootPressed = false;
 
     this.vy += GRAVITY;
     if (this.vy > 15) this.vy = 15;
@@ -409,6 +425,10 @@ class Player {
           this.jumpsUsed = 0;
         } else if (this.vy < 0) {
           this.y = t.y + t.h;
+          if (t.itemBlock && !t.used) {
+            t.used = true;
+            powerups.push(new PowerupItem(t.x, t.y));
+          }
         }
         this.vy = 0;
       }
@@ -428,7 +448,7 @@ class Player {
     if (lives <= 0) {
       showOverlay('GAME OVER - trykk R for å starte på nytt');
     } else {
-      setTimeout(() => { this.reset(); }, 700);
+      setTimeout(() => { this.reset(); updateHud(); }, 700);
       showOverlayBrief('Du døde! ' + lives + ' liv igjen');
     }
   }
@@ -443,6 +463,18 @@ class Player {
     // face
     ctx.fillStyle = '#ffcc99';
     ctx.fillRect(sx + (this.facing > 0 ? 10 : 0), this.y + 6, 18, 12);
+    // laser gun held in hands while ammo remains
+    if (this.gunAmmo > 0) {
+      const gunY = this.y + this.h * 0.55;
+      ctx.fillStyle = '#555';
+      if (this.facing > 0) {
+        ctx.fillRect(sx + this.w - 6, gunY, 18, 6);
+      } else {
+        ctx.fillRect(sx - 12, gunY, 18, 6);
+      }
+      ctx.fillStyle = '#ff3366';
+      ctx.fillRect(sx + (this.facing > 0 ? this.w + 8 : -12), gunY + 1, 4, 4);
+    }
   }
 }
 
@@ -521,6 +553,64 @@ class Fireball {
     ctx.fill();
     ctx.strokeStyle = '#cc3300';
     ctx.stroke();
+  }
+}
+
+class PowerupItem {
+  constructor(x, y) {
+    this.x = x + TILE / 2 - 10;
+    this.y = y - 24;
+    this.w = 20;
+    this.h = 20;
+    this.taken = false;
+    this.bob = Math.random() * Math.PI * 2;
+  }
+  update() {
+    this.bob += 0.12;
+  }
+  draw() {
+    if (this.taken) return;
+    const sx = this.x - camX;
+    if (sx < -50 || sx > canvas.width + 50) return;
+    const bobY = this.y + Math.sin(this.bob) * 3;
+    ctx.fillStyle = '#444';
+    ctx.fillRect(sx, bobY + 6, this.w, 8);
+    ctx.fillStyle = '#666';
+    ctx.fillRect(sx + this.w - 6, bobY, 10, 8);
+    ctx.fillStyle = '#ff3366';
+    ctx.fillRect(sx + this.w + 2, bobY + 1, 4, 4);
+    ctx.fillStyle = '#222';
+    ctx.fillRect(sx + 2, bobY + 12, 6, 8);
+  }
+}
+
+class LaserShot {
+  constructor(x, y, dir) {
+    this.x = x;
+    this.y = y;
+    this.w = 16;
+    this.h = 5;
+    this.vx = dir * 11;
+    this.dir = dir;
+    this.dead = false;
+  }
+  update() {
+    this.x += this.vx;
+    for (const t of solidTiles) {
+      if (rectsOverlap(this, t)) {
+        this.dead = true;
+      }
+    }
+    if (this.x < camX - 200 || this.x > camX + canvas.width + 200) {
+      this.dead = true;
+    }
+  }
+  draw() {
+    const sx = this.x - camX;
+    ctx.fillStyle = '#ff3366';
+    ctx.fillRect(sx, this.y, this.w, this.h);
+    ctx.fillStyle = '#ffccdd';
+    ctx.fillRect(sx + (this.dir > 0 ? this.w - 4 : 0), this.y - 1, 4, this.h + 2);
   }
 }
 
@@ -1081,6 +1171,7 @@ let spawnPoint = { x: 40, y: 300 };
 let player = new Player();
 let enemies = [];
 let fireballs = [];
+let playerShots = [];
 let boss = null;
 let checkpoint = null;
 let lives = 3;
@@ -1092,6 +1183,7 @@ function initEnemies() {
   const level = LEVELS[currentLevelIndex];
   enemies = level.enemyPositions.map(p => new Enemy(p.x, p.y, p.range));
   fireballs = [];
+  playerShots = [];
   const groundY = (level.map.length - 1) * TILE;
   // Place the boss just before the flag
   if (flagTile) {
@@ -1135,6 +1227,14 @@ function updateHud() {
   livesEl.textContent = lives;
   scoreEl.textContent = score;
   coinsEl.textContent = coins;
+  const ammoRow = document.getElementById('ammoRow');
+  const ammoEl = document.getElementById('ammo');
+  if (player.gunAmmo > 0) {
+    ammoRow.style.display = 'block';
+    ammoEl.textContent = player.gunAmmo;
+  } else {
+    ammoRow.style.display = 'none';
+  }
 }
 
 function showOverlay(text) {
@@ -1180,6 +1280,7 @@ function nextLevel() {
   initEnemies();
   player.reset();
   camX = 0;
+  updateHud();
   showOverlayBrief('➡️ Bane ' + (currentLevelIndex + 1) + '!');
 }
 
@@ -1246,7 +1347,7 @@ function drawTiles() {
   // (used to draw a grass cap only on exposed top surfaces).
   if (!drawTiles._set || drawTiles._level !== currentLevelIndex) {
     const set = new Set();
-    for (const t of solidTiles) if (!t.pipe) set.add(t.x + ',' + t.y);
+    for (const t of solidTiles) if (!t.pipe && !t.itemBlock) set.add(t.x + ',' + t.y);
     drawTiles._set = set;
     drawTiles._level = currentLevelIndex;
   }
@@ -1254,7 +1355,24 @@ function drawTiles() {
   for (const t of solidTiles) {
     const sx = t.x - camX;
     if (sx < -TILE || sx > canvas.width) continue;
-    if (t.pipe) {
+    if (t.itemBlock) {
+      if (t.used) {
+        ctx.fillStyle = '#8a7a6a';
+        ctx.fillRect(sx, t.y, t.w, t.h);
+        ctx.strokeStyle = '#5a4d40';
+        ctx.strokeRect(sx, t.y, t.w, t.h);
+      } else {
+        ctx.fillStyle = '#f2a71b';
+        ctx.fillRect(sx, t.y, t.w, t.h);
+        ctx.strokeStyle = '#a56c0a';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(sx + 1, t.y + 1, t.w - 2, t.h - 2);
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 22px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('?', sx + t.w / 2, t.y + t.h - 10);
+      }
+    } else if (t.pipe) {
       ctx.fillStyle = '#0a8f0a';
       ctx.fillRect(sx, t.y, t.w, t.h);
       ctx.strokeStyle = '#065906';
@@ -1502,6 +1620,49 @@ function checkBoss() {
   }
 }
 
+function checkPowerups() {
+  for (const p of powerups) {
+    if (p.taken) continue;
+    if (rectsOverlap(player, p)) {
+      p.taken = true;
+      player.gunAmmo = 5;
+      updateHud();
+      showOverlayBrief('🔫 Laserpistol! 5 skudd - trykk W for å skyte!');
+    }
+  }
+  powerups = powerups.filter(p => !p.taken);
+}
+
+function checkPlayerShots() {
+  for (const s of playerShots) {
+    if (s.dead) continue;
+    for (const e of enemies) {
+      if (e.alive && rectsOverlap(s, e)) {
+        e.alive = false;
+        s.dead = true;
+        score += 200;
+        updateHud();
+        break;
+      }
+    }
+    if (s.dead) continue;
+    if (boss && boss.alive) {
+      const hittable = boss.visible === undefined || boss.visible;
+      if (hittable && boss.invuln === 0 && rectsOverlap(s, boss)) {
+        boss.hp--;
+        s.dead = true;
+        score += 300;
+        updateHud();
+        if (boss.hp <= 0) {
+          boss.alive = false;
+          score += 2000;
+          updateHud();
+        }
+      }
+    }
+  }
+}
+
 function loop() {
   if (!won && lives > 0) {
     player.update();
@@ -1509,12 +1670,17 @@ function loop() {
     if (boss) boss.update();
     for (const f of fireballs) f.update();
     fireballs = fireballs.filter(f => !f.dead);
+    for (const p of powerups) p.update();
+    for (const s of playerShots) s.update();
+    playerShots = playerShots.filter(s => !s.dead);
     checkCoins();
     checkCheckpoint();
     checkPipeWarp();
     checkStars();
+    checkPowerups();
     checkEnemies();
     checkBoss();
+    checkPlayerShots();
     checkWin();
 
     camX = player.x - canvas.width / 2 + player.w / 2;
@@ -1528,9 +1694,11 @@ function loop() {
   drawStars();
   drawCheckpoint();
   drawFlag();
+  for (const p of powerups) p.draw();
   for (const e of enemies) e.draw();
   if (boss) boss.draw();
   for (const f of fireballs) f.draw();
+  for (const s of playerShots) s.draw();
   player.draw();
 
   requestAnimationFrame(loop);
