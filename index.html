@@ -58,7 +58,7 @@
     <div id="ammoRow" style="display:none;">🔫 Skudd: <span id="ammo">0</span></div>
   </div>
   <canvas id="game" width="800" height="520"></canvas>
-  <div id="hint">Piltaster / A,D = bevege deg, Mellomrom / Pil opp = hopp (dobbelthopp!), Pil ned / S på et grønt rør = varp, R = restart. 1 = start av bane 1, 2 = teleporter til Bowser, 3 = start av bane 2, 4 = teleporter til King Boo, 5 = start av bane 3, 6 = teleporter til Kamek. Finn de skjulte rørene som leder til stjerner (+5000 poeng)! Slå på et "?"-blokk nedenfra for å finne en laserpistol - trykk W for å skyte (5 skudd)! Bane 1: beseire Bowser (pass på ildpusten hans på nært hold!). Bane 2: beseire King Boo! Bane 3: beseire Kamek (han teleporterer for å unngå hopp-angrep)!</div>
+  <div id="hint">Piltaster / A,D = bevege deg (dobbelttrykk for å sprinte!), Mellomrom / Pil opp = hopp (dobbelthopp!), Pil ned / S på et grønt rør = varp, R = restart. 1 = start av bane 1, 2 = teleporter til Bowser, 3 = start av bane 2, 4 = teleporter til King Boo, 5 = start av bane 3, 6 = teleporter til Kamek. Finn de skjulte rørene som leder til stjerner (+5000 poeng)! Slå på et "?"-blokk nedenfra for å finne en laserpistol - trykk W for å skyte (5 skudd)! Bane 1: beseire Bowser (pass på ildpusten hans på nært hold!). Bane 2: beseire King Boo! Bane 3: beseire Kamek (han teleporterer for å unngå hopp-angrep)!</div>
   <div id="hintToggleLabel">Trykk I for hjelp</div>
   <div id="overlay"></div>
 
@@ -79,9 +79,21 @@ let jumpPressed = false;
 let shootPressed = false;
 let hintVisible = false;
 const jumpKeys = ['Space', 'ArrowUp'];
+const DOUBLE_TAP_MS = 300;
+let lastTap = { left: 0, right: 0 };
 window.addEventListener('keydown', e => {
   if (!keys[e.code] && jumpKeys.includes(e.code)) jumpPressed = true;
   if (!keys[e.code] && e.code === 'KeyW') shootPressed = true;
+  if (!keys[e.code] && (e.code === 'ArrowLeft' || e.code === 'KeyA')) {
+    const now = Date.now();
+    if (now - lastTap.left < DOUBLE_TAP_MS) player.sprinting = true;
+    lastTap.left = now;
+  }
+  if (!keys[e.code] && (e.code === 'ArrowRight' || e.code === 'KeyD')) {
+    const now = Date.now();
+    if (now - lastTap.right < DOUBLE_TAP_MS) player.sprinting = true;
+    lastTap.right = now;
+  }
   keys[e.code] = true;
   if (e.code === 'KeyR') restart();
   if (e.code === 'Digit1') teleportToLevelStart(0);
@@ -101,7 +113,14 @@ window.addEventListener('keydown', e => {
     document.getElementById('hint').style.display = hintVisible ? 'block' : 'none';
   }
 });
-window.addEventListener('keyup', e => keys[e.code] = false);
+window.addEventListener('keyup', e => {
+  keys[e.code] = false;
+  if (['ArrowLeft', 'KeyA', 'ArrowRight', 'KeyD'].includes(e.code)) {
+    if (!keys['ArrowLeft'] && !keys['KeyA'] && !keys['ArrowRight'] && !keys['KeyD']) {
+      player.sprinting = false;
+    }
+  }
+});
 
 // Level layout: 0 = empty, 1 = ground/brick, 2 = coin, 3 = flag(goal), 4 = pipe
 const level1Map = [
@@ -387,18 +406,20 @@ class Player {
     this.dead = false;
     this.invuln = 0;
     this.jumpsUsed = 0;
+    this.sprinting = false;
     // gunAmmo is intentionally left untouched here: dying and respawning
     // (the only caller of reset() outside of a fresh game) should not take
     // away shots the player already earned.
   }
   update() {
-    const speed = 4.2;
+    const speed = this.sprinting ? 6.6 : 4.2;
+    const accel = this.sprinting ? 0.9 : 0.6;
     if (keys['ArrowLeft'] || keys['KeyA']) {
-      this.vx -= 0.6;
+      this.vx -= accel;
       this.facing = -1;
     }
     if (keys['ArrowRight'] || keys['KeyD']) {
-      this.vx += 0.6;
+      this.vx += accel;
       this.facing = 1;
     }
     this.vx *= FRICTION;
