@@ -4,6 +4,7 @@
 class Player {
   constructor() {
     this.gunAmmo = 0;
+    this.hasPortalGun = false;
     this.reset();
   }
   reset() {
@@ -19,9 +20,10 @@ class Player {
     this.invuln = 0;
     this.jumpsUsed = 0;
     this.sprinting = false;
-    // gunAmmo is intentionally left untouched here: dying and respawning
-    // (the only caller of reset() outside of a fresh game) should not take
-    // away shots the player already earned.
+    this.portalCooldown = 0;
+    // gunAmmo/hasPortalGun are intentionally left untouched here: dying
+    // and respawning (the only caller of reset() outside of a fresh game)
+    // should not take away powerups the player already earned.
   }
   update() {
     if (this.dead) return;
@@ -82,7 +84,7 @@ class Player {
           this.y = t.y + t.h;
           if (t.itemBlock && !t.used) {
             t.used = true;
-            powerups.push(new PowerupItem(t.x, t.y));
+            powerups.push(new PowerupItem(t.x, t.y, t.itemType));
           }
         }
         this.vy = 0;
@@ -131,6 +133,21 @@ class Player {
       }
       ctx.fillStyle = '#ff3366';
       ctx.fillRect(sx + (this.facing > 0 ? this.w + 8 : -12), gunY + 1, 4, 4);
+    }
+    // portal gun: once picked up, held permanently (not consumed like ammo)
+    if (this.hasPortalGun) {
+      const gunY = this.y + this.h * 0.78;
+      ctx.fillStyle = '#666';
+      if (this.facing > 0) {
+        ctx.fillRect(sx + this.w - 6, gunY, 18, 6);
+      } else {
+        ctx.fillRect(sx - 12, gunY, 18, 6);
+      }
+      const tipX = sx + (this.facing > 0 ? this.w + 8 : -12);
+      ctx.fillStyle = '#ff8800';
+      ctx.fillRect(tipX, gunY, 4, 3);
+      ctx.fillStyle = '#2299ff';
+      ctx.fillRect(tipX, gunY + 3, 4, 3);
     }
   }
 }
@@ -388,11 +405,12 @@ class Fireball {
 }
 
 class PowerupItem {
-  constructor(x, y) {
+  constructor(x, y, type) {
     this.x = x + TILE / 2 - 10;
     this.y = y - 24;
     this.w = 20;
     this.h = 20;
+    this.type = type || 'laser';
     this.taken = false;
     this.bob = Math.random() * Math.PI * 2;
   }
@@ -404,14 +422,28 @@ class PowerupItem {
     const sx = this.x - camX;
     if (sx < -50 || sx > canvas.width + 50) return;
     const bobY = this.y + Math.sin(this.bob) * 3;
-    ctx.fillStyle = '#444';
-    ctx.fillRect(sx, bobY + 6, this.w, 8);
-    ctx.fillStyle = '#666';
-    ctx.fillRect(sx + this.w - 6, bobY, 10, 8);
-    ctx.fillStyle = '#ff3366';
-    ctx.fillRect(sx + this.w + 2, bobY + 1, 4, 4);
-    ctx.fillStyle = '#222';
-    ctx.fillRect(sx + 2, bobY + 12, 6, 8);
+    if (this.type === 'portal') {
+      // two-tone orange/blue pistol, distinct from the laser gun's red dot
+      ctx.fillStyle = '#444';
+      ctx.fillRect(sx, bobY + 6, this.w, 8);
+      ctx.fillStyle = '#666';
+      ctx.fillRect(sx + this.w - 6, bobY, 10, 8);
+      ctx.fillStyle = '#ff8800';
+      ctx.fillRect(sx + this.w + 1, bobY, 4, 4);
+      ctx.fillStyle = '#2299ff';
+      ctx.fillRect(sx + this.w + 1, bobY + 4, 4, 4);
+      ctx.fillStyle = '#222';
+      ctx.fillRect(sx + 2, bobY + 12, 6, 8);
+    } else {
+      ctx.fillStyle = '#444';
+      ctx.fillRect(sx, bobY + 6, this.w, 8);
+      ctx.fillStyle = '#666';
+      ctx.fillRect(sx + this.w - 6, bobY, 10, 8);
+      ctx.fillStyle = '#ff3366';
+      ctx.fillRect(sx + this.w + 2, bobY + 1, 4, 4);
+      ctx.fillStyle = '#222';
+      ctx.fillRect(sx + 2, bobY + 12, 6, 8);
+    }
   }
 }
 

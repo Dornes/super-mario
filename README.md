@@ -82,6 +82,7 @@ necessary at the current size.
 - Space / Arrow Up: jump (double jump available)
 - Arrow Down / `S` on a green pipe: warp
 - `W`: fire the laser gun (if you've picked one up)
+- `Q` / `E`: fire the orange / blue portal (if you've picked up the portal gun)
 - `R`: restart
 - `1`-`6`: jump to the start/boss of levels 1-3 (debug/testing shortcut)
 - `I`: toggle the on-screen hint text
@@ -91,5 +92,8 @@ necessary at the current size.
 
 Three levels, each ending in a boss fight (Bowser, King Boo, Kamek), with
 increasing platforming difficulty, more Hammer Bros throwing hammers, hidden
-warp pipes leading to bonus star vaults, checkpoints, and a "?" item block
-per level that spawns a laser gun powerup.
+warp pipes leading to bonus star vaults, checkpoints, a "?" item block per
+level that spawns a laser gun powerup, and one hard-to-reach purple "P" item
+block per level that spawns a Portal gun. The Portal gun fires an orange and
+a blue portal onto the nearest surface in front of you; stepping into one
+teleports you out the other, permanently, once picked up.

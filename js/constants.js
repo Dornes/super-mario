@@ -32,6 +32,9 @@ window.addEventListener('keydown', e => {
     if (now - lastTap.right < DOUBLE_TAP_MS) player.sprinting = true;
     lastTap.right = now;
   }
+  // portal gun: Q fires the orange portal, E fires the blue one
+  if (!keys[e.code] && e.code === 'KeyQ' && !won && lives > 0) firePortal('orange');
+  if (!keys[e.code] && e.code === 'KeyE' && !won && lives > 0) firePortal('blue');
   keys[e.code] = true;
   if (e.code === 'KeyR') restart();
   if (e.code === 'Digit1') teleportToLevelStart(0);

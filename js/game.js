@@ -34,7 +34,9 @@ function buildLevel() {
       if (ch === '1' || ch === '4') {
         solidTiles.push({x, y, w: TILE, h: TILE, pipe: ch === '4'});
       } else if (ch === 'q') {
-        solidTiles.push({x, y, w: TILE, h: TILE, pipe: false, itemBlock: true, used: false});
+        solidTiles.push({x, y, w: TILE, h: TILE, pipe: false, itemBlock: true, used: false, itemType: 'laser'});
+      } else if (ch === 'o') {
+        solidTiles.push({x, y, w: TILE, h: TILE, pipe: false, itemBlock: true, used: false, itemType: 'portal'});
       } else if (ch === '2') {
         coinTiles.push({x: x + 8, y: y + 8, w: 24, h: 24, taken: false});
       } else if (ch === '3') {
@@ -175,6 +177,7 @@ let fireballs = [];
 let playerShots = [];
 let hammers = [];
 let deathParticles = [];
+let portals = { orange: null, blue: null };
 
 // spawns a short crumble-apart animation of small debris chunks at an
 // entity's position, using the given colors to roughly match its sprite
@@ -236,6 +239,7 @@ function initEnemies() {
   playerShots = [];
   hammers = [];
   deathParticles = [];
+  portals = { orange: null, blue: null };
   const groundY = (level.map.length - 1) * TILE;
   // Place the boss just before the flag
   if (flagTile) {
@@ -450,15 +454,15 @@ function drawTiles() {
         ctx.strokeStyle = '#5a4d40';
         ctx.strokeRect(sx, t.y, t.w, t.h);
       } else {
-        ctx.fillStyle = '#f2a71b';
+        ctx.fillStyle = t.itemType === 'portal' ? '#7a3ad1' : '#f2a71b';
         ctx.fillRect(sx, t.y, t.w, t.h);
-        ctx.strokeStyle = '#a56c0a';
+        ctx.strokeStyle = t.itemType === 'portal' ? '#4a1f8a' : '#a56c0a';
         ctx.lineWidth = 2;
         ctx.strokeRect(sx + 1, t.y + 1, t.w - 2, t.h - 2);
         ctx.fillStyle = '#fff';
         ctx.font = 'bold 22px sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText('?', sx + t.w / 2, t.y + t.h - 10);
+        ctx.fillText(t.itemType === 'portal' ? 'P' : '?', sx + t.w / 2, t.y + t.h - 10);
       }
     } else if (t.pipe) {
       ctx.fillStyle = '#0a8f0a';
@@ -715,12 +719,72 @@ function checkPowerups() {
     if (p.taken) continue;
     if (rectsOverlap(player, p)) {
       p.taken = true;
-      player.gunAmmo = 5;
-      updateHud();
-      showOverlayBrief('🔫 Laserpistol! 5 skudd - trykk W for å skyte!');
+      if (p.type === 'portal') {
+        player.hasPortalGun = true;
+        showOverlayBrief('🌀 Portalpistol! Trykk Q for oransje, E for blå portal!');
+      } else {
+        player.gunAmmo = 5;
+        updateHud();
+        showOverlayBrief('🔫 Laserpistol! 5 skudd - trykk W for å skyte!');
+      }
     }
   }
   powerups = powerups.filter(p => !p.taken);
+}
+
+// finds the topmost solid tile in the column a fixed distance in front of
+// the player (i.e. the surface you'd land on there), and drops a portal
+// of the given color onto it - this keeps aiming simple in a 2D platformer
+// while still letting portals be used to skip across pits/gaps
+function firePortal(color) {
+  if (!player.hasPortalGun) return;
+  const targetX = player.x + player.w / 2 + player.facing * 150;
+  let hitTile = null;
+  for (const t of solidTiles) {
+    if (targetX >= t.x && targetX < t.x + t.w) {
+      if (!hitTile || t.y < hitTile.y) hitTile = t;
+    }
+  }
+  if (!hitTile) {
+    showOverlayBrief('🌀 Ingen overflate å plassere portalen på der!');
+    return;
+  }
+  portals[color] = {x: hitTile.x, y: hitTile.y - 50, w: TILE, h: 50, color};
+}
+
+function checkPortals() {
+  if (player.portalCooldown > 0) {
+    player.portalCooldown--;
+    return;
+  }
+  const {orange, blue} = portals;
+  if (!orange || !blue) return;
+  const teleport = (from, to) => {
+    if (!rectsOverlap(player, from)) return false;
+    player.x = to.x + to.w / 2 - player.w / 2;
+    player.y = to.y + to.h - player.h;
+    player.portalCooldown = 20;
+    return true;
+  };
+  teleport(orange, blue) || teleport(blue, orange);
+}
+
+function drawPortals() {
+  for (const color of ['orange', 'blue']) {
+    const p = portals[color];
+    if (!p) continue;
+    const sx = p.x - camX;
+    if (sx < -60 || sx > canvas.width + 60) continue;
+    ctx.save();
+    ctx.fillStyle = color === 'orange' ? '#ff8800' : '#2299ff';
+    ctx.strokeStyle = color === 'orange' ? '#ffcc88' : '#aee0ff';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.ellipse(sx + p.w / 2, p.y + p.h / 2, p.w * 0.45, p.h * 0.48, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
 }
 
 function checkPlayerShots() {
@@ -788,6 +852,7 @@ function loop() {
     checkPipeWarp();
     checkStars();
     checkPowerups();
+    checkPortals();
     checkEnemies();
     checkBoss();
     checkPlayerShots();
@@ -814,6 +879,7 @@ function loop() {
   drawStars();
   drawCheckpoint();
   drawFlag();
+  drawPortals();
   for (const p of powerups) p.draw();
   for (const e of enemies) e.draw();
   if (boss) boss.draw();
