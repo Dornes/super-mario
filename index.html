@@ -82,6 +82,12 @@ window.addEventListener('keydown', e => {
   if (e.code === 'Digit4') teleportToBoss(1);
   if (e.code === 'Digit5') teleportToLevelStart(2);
   if (e.code === 'Digit6') teleportToBoss(2);
+  // secret cheat: Shift+G equips a fresh laser gun with 5 shots
+  if (e.shiftKey && e.code === 'KeyG' && !won && lives > 0) {
+    player.gunAmmo = 5;
+    updateHud();
+    showOverlayBrief('🔫 Ny laserpistol! 5 skudd!');
+  }
 });
 window.addEventListener('keyup', e => keys[e.code] = false);
 
@@ -354,6 +360,7 @@ function buildPipesAndVault() {
 
 class Player {
   constructor() {
+    this.gunAmmo = 0;
     this.reset();
   }
   reset() {
@@ -368,7 +375,9 @@ class Player {
     this.dead = false;
     this.invuln = 0;
     this.jumpsUsed = 0;
-    this.gunAmmo = 0;
+    // gunAmmo is intentionally left untouched here: dying and respawning
+    // (the only caller of reset() outside of a fresh game) should not take
+    // away shots the player already earned.
   }
   update() {
     const speed = 4.2;
@@ -1259,6 +1268,7 @@ function restart() {
     currentLevelIndex = 0;
     score = 0;
     coins = 0;
+    player.gunAmmo = 0;
   }
   buildLevel();
   initEnemies();
