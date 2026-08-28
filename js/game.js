@@ -175,6 +175,48 @@ let fireballs = [];
 let playerShots = [];
 let hammers = [];
 let deathParticles = [];
+let lawyerCars = [];
+let sunroofDrops = [];
+
+// Boss theme for Sy Loophole (level 4). Starts on the last 3 seconds of the
+// track the moment he first scrolls into view (not the instant he spawns
+// off-screen), then loops the full track from the top for as long as he's
+// alive.
+const bossMusic = new Audio('sounds/lawyer-boss-theme.mp3');
+let bossMusicActive = false;
+bossMusic.addEventListener('ended', () => {
+  if (boss instanceof LawyerBoss && boss.alive) {
+    bossMusic.currentTime = 0;
+    bossMusic.play().catch(() => {});
+  }
+});
+function startBossMusic() {
+  bossMusic.pause();
+  const playNearEnd = () => {
+    bossMusic.currentTime = Math.max(0, (bossMusic.duration || 3) - 3);
+    bossMusic.play().catch(() => {});
+  };
+  if (bossMusic.readyState >= 1) {
+    playNearEnd();
+  } else {
+    bossMusic.addEventListener('loadedmetadata', playNearEnd, { once: true });
+  }
+}
+function stopBossMusic() {
+  bossMusicActive = false;
+  bossMusic.pause();
+  bossMusic.currentTime = 0;
+}
+// Kicks off the boss theme the first time Sy Loophole is actually visible
+// within the camera's view, rather than as soon as he's spawned off-screen.
+function updateBossMusicTrigger() {
+  if (bossMusicActive || !(boss instanceof LawyerBoss) || !boss.alive) return;
+  const sx = boss.x - camX;
+  if (sx + boss.w > 0 && sx < canvas.width) {
+    bossMusicActive = true;
+    startBossMusic();
+  }
+}
 
 // spawns a short crumble-apart animation of small debris chunks at an
 // entity's position, using the given colors to roughly match its sprite
@@ -206,6 +248,7 @@ function crumbleColors(entity) {
   if (entity instanceof Bowser) return ['#3a8f3a', '#c46f2a', 'white'];
   if (entity instanceof KingBoo) return ['#f5f5f5', '#dedede', 'black'];
   if (entity instanceof Kamek) return ['#3a4fb0', '#e8d24a', '#c46f2a'];
+  if (entity instanceof LawyerBoss) return ['#f2c229', '#3a3a3a', '#e8b98a'];
   if (entity instanceof Player) return ['#e52521', '#0033cc', '#ffcc99'];
   return ['#999', '#666'];
 }
@@ -236,23 +279,41 @@ function initEnemies() {
   playerShots = [];
   hammers = [];
   deathParticles = [];
+  lawyerCars = [];
+  sunroofDrops = [];
   const groundY = (level.map.length - 1) * TILE;
-  // Place the boss just before the flag
-  if (flagTile) {
+  // Place the boss just before the flag. Levels with no bossType yet (e.g.
+  // a level whose boss hasn't been designed) simply have no boss fight —
+  // reaching the flag clears the level immediately.
+  if (flagTile && level.bossType) {
     if (level.bossType === 'kingboo') {
       boss = new KingBoo(flagTile.x - 200, flagTile.y + flagTile.h - 160);
     } else if (level.bossType === 'kamek') {
       boss = new Kamek(flagTile.x - 190, groundY - 170);
+    } else if (level.bossType === 'lawyer') {
+      boss = new LawyerBoss(flagTile.x - 160, flagTile.y + flagTile.h - 80);
     } else {
       boss = new Bowser(flagTile.x - 150, flagTile.y + flagTile.h - 80);
     }
   } else {
     boss = null;
   }
+  if (boss instanceof LawyerBoss) {
+    bossMusicActive = false; // wait until he's actually on screen to start the music
+  } else {
+    stopBossMusic();
+  }
   // Checkpoint right before the boss — placed before any elevated platform
-  // near the boss so it doesn't render underneath/inside one.
-  checkpoint = boss ? {
-    x: computeCheckpointX(boss.homeX, groundY),
+  // near the boss so it doesn't render underneath/inside one. Bossless
+  // levels use an explicit checkpointX from the level config instead.
+  let checkpointX = null;
+  if (boss) {
+    checkpointX = computeCheckpointX(boss.homeX, groundY);
+  } else if (flagTile && level.checkpointX != null) {
+    checkpointX = level.checkpointX;
+  }
+  checkpoint = checkpointX != null ? {
+    x: checkpointX,
     y: groundY - 90,
     w: 14,
     h: 90,
@@ -353,7 +414,11 @@ function teleportToBoss(levelIdx) {
   camX = Math.max(0, Math.min(spawnPoint.x - canvas.width / 2, levelWidth - canvas.width));
   overlay.style.display = 'none';
   updateHud();
-  showOverlayBrief('👑 Teleportert til sjefsfighten på bane ' + (levelIdx + 1) + '!');
+  if (boss) {
+    showOverlayBrief('👑 Teleportert til sjefsfighten på bane ' + (levelIdx + 1) + '!');
+  } else {
+    showOverlayBrief('🚩 Teleportert til sjekkpunktet på bane ' + (levelIdx + 1) + '!');
+  }
 }
 
 function teleportToLevelStart(levelIdx) {
@@ -410,22 +475,50 @@ function drawCloud(cx, cy, scale, variant) {
 }
 
 function drawBackground() {
-  ctx.fillStyle = '#5c94fc';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  // clouds: bigger than before, cycling through a few distinct shapes/sizes
-  for (let i = 0; i < 6; i++) {
-    const cx = (i * 300 - camX * 0.3) % (levelWidth + 300);
-    const variant = i % CLOUD_VARIANTS.length;
-    const scale = 1.1 + (i % 3) * 0.2;
-    drawCloud(cx + 100, 60 + (i % 3) * 20, scale, variant);
+  const testTheme = LEVELS[currentLevelIndex].theme === 'test';
+  if (testTheme) {
+    // Neutral gray "test chamber" backdrop - deliberately not the game's
+    // normal sky/grass look, so this reads as an out-of-theme testing area.
+    ctx.fillStyle = '#3a3f44';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+    ctx.lineWidth = 1;
+    const gridStep = 80;
+    for (let gx = -((camX * 0.3) % gridStep); gx < canvas.width; gx += gridStep) {
+      ctx.beginPath();
+      ctx.moveTo(gx, 0);
+      ctx.lineTo(gx, canvas.height);
+      ctx.stroke();
+    }
+    for (let gy = 0; gy < canvas.height; gy += gridStep) {
+      ctx.beginPath();
+      ctx.moveTo(0, gy);
+      ctx.lineTo(canvas.width, gy);
+      ctx.stroke();
+    }
+  } else {
+    ctx.fillStyle = '#5c94fc';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    // clouds: bigger than before, cycling through a few distinct shapes/sizes
+    for (let i = 0; i < 6; i++) {
+      const cx = (i * 300 - camX * 0.3) % (levelWidth + 300);
+      const variant = i % CLOUD_VARIANTS.length;
+      const scale = 1.1 + (i % 3) * 0.2;
+      drawCloud(cx + 100, 60 + (i % 3) * 20, scale, variant);
+    }
   }
   // Dark "void" band at the level of the main ground row, drawn behind the
   // tiles: solid ground tiles draw over it, but pits/gaps show this instead
   // of plain sky, so holes in the floor are obvious at a glance.
   const groundY = (LEVELS[currentLevelIndex].map.length - 1) * TILE;
   const grad = ctx.createLinearGradient(0, groundY, 0, canvas.height);
-  grad.addColorStop(0, '#241505');
-  grad.addColorStop(1, '#050208');
+  if (testTheme) {
+    grad.addColorStop(0, '#1c1f22');
+    grad.addColorStop(1, '#050607');
+  } else {
+    grad.addColorStop(0, '#241505');
+    grad.addColorStop(1, '#050208');
+  }
   ctx.fillStyle = grad;
   ctx.fillRect(0, groundY, canvas.width, canvas.height - groundY);
 }
@@ -440,6 +533,7 @@ function drawTiles() {
     drawTiles._level = currentLevelIndex;
   }
   const groundSet = drawTiles._set;
+  const testTheme = LEVELS[currentLevelIndex].theme === 'test';
   for (const t of solidTiles) {
     const sx = t.x - camX;
     if (sx < -TILE || sx > canvas.width) continue;
@@ -473,6 +567,18 @@ function drawTiles() {
         ctx.lineTo(sx + t.w / 2 + 8, t.y + 8);
         ctx.lineTo(sx + t.w / 2, t.y + 20);
         ctx.fill();
+      }
+    } else if (testTheme) {
+      // Plain neutral gray blocks for the boss-testing arena - no
+      // grass/dirt texture, just a flat gray slab with a faint top edge.
+      ctx.fillStyle = '#5a6168';
+      ctx.fillRect(sx, t.y, t.w, t.h);
+      ctx.strokeStyle = '#33383d';
+      ctx.strokeRect(sx, t.y, t.w, t.h);
+      const hasAbove = groundSet.has(t.x + ',' + (t.y - TILE));
+      if (!hasAbove) {
+        ctx.fillStyle = '#787f86';
+        ctx.fillRect(sx, t.y, t.w, 6);
       }
     } else {
       ctx.fillStyle = '#c2701d';
@@ -651,14 +757,29 @@ function checkWin() {
   if (won || !flagTile) return;
   if (boss && boss.alive) return; // must defeat the boss first
   if (player.x + player.w > flagTile.x) {
-    if (currentLevelIndex < LEVELS.length - 1) {
+    const level = LEVELS[currentLevelIndex];
+    if (level.isTest) {
+      // Boss-testing arena: never chains into another level or the
+      // "you won the game" screen, it just confirms the run.
+      won = true;
+      score += 1000;
+      updateHud();
+      showOverlay('🧪 Boss-test fullført! Poeng: ' + score + '  (trykk R for å restarte)');
+      return;
+    }
+    if (currentLevelIndex < REAL_LEVEL_COUNT - 1) {
       nextLevel();
       return;
     }
     won = true;
     score += 1000;
     updateHud();
-    showOverlay('🎉 Du beseiret ' + LEVELS[currentLevelIndex].bossName + ' og vant hele spillet! Poeng: ' + score + '  (trykk R for å spille igjen)');
+    const bossName = level.bossName;
+    if (bossName) {
+      showOverlay('🎉 Du beseiret ' + bossName + ' og vant hele spillet! Poeng: ' + score + '  (trykk R for å spille igjen)');
+    } else {
+      showOverlay('🏁 Bane ' + (currentLevelIndex + 1) + ' fullført! Poeng: ' + score + '  (trykk R for å spille igjen)');
+    }
   }
 }
 
@@ -679,6 +800,7 @@ function checkBoss() {
         spawnCrumble(boss, crumbleColors(boss));
         score += 2000;
         updateHud();
+        if (boss instanceof LawyerBoss) stopBossMusic();
       }
     } else if (player.invuln === 0 && hittable) {
       player.invuln = 90;
@@ -694,6 +816,28 @@ function checkBoss() {
       f.dead = true;
       player.invuln = 90;
       player.vx = player.x < f.x ? -7 : 7;
+      player.vy = -6;
+      lives--;
+      updateHud();
+      if (lives <= 0) killPlayerGameOver();
+    }
+  }
+  for (const c of lawyerCars) {
+    if (!c.dead && player.invuln === 0 && rectsOverlap(player, c)) {
+      player.invuln = 90;
+      player.vx = player.x < c.x ? -7 : 7;
+      player.vy = -6;
+      lives--;
+      updateHud();
+      if (lives <= 0) killPlayerGameOver();
+    }
+  }
+  for (const d of sunroofDrops) {
+    if (!d.dead && !d.landed && player.invuln === 0 && rectsOverlap(player, d)) {
+      d.landed = true;
+      d.splat = 26;
+      player.invuln = 90;
+      player.vx = player.x < d.x ? -7 : 7;
       player.vy = -6;
       lives--;
       updateHud();
@@ -743,6 +887,7 @@ function checkPlayerShots() {
         if (boss.hp <= 0) {
           boss.alive = false;
           spawnCrumble(boss, crumbleColors(boss));
+          if (boss instanceof LawyerBoss) stopBossMusic();
         }
       }
     }
@@ -778,6 +923,10 @@ function loop() {
     if (boss) boss.update();
     for (const f of fireballs) f.update();
     fireballs = fireballs.filter(f => !f.dead);
+    for (const c of lawyerCars) c.update();
+    lawyerCars = lawyerCars.filter(c => !c.dead);
+    for (const d of sunroofDrops) d.update();
+    sunroofDrops = sunroofDrops.filter(d => !d.dead);
     for (const p of powerups) p.update();
     for (const s of playerShots) s.update();
     playerShots = playerShots.filter(s => !s.dead);
@@ -797,6 +946,7 @@ function loop() {
     camX = player.x - canvas.width / 2 + player.w / 2;
     if (camX < 0) camX = 0;
     if (camX > levelWidth - canvas.width) camX = levelWidth - canvas.width;
+    updateBossMusicTrigger();
   }
 
   for (const dp of deathParticles) {
@@ -818,6 +968,8 @@ function loop() {
   for (const e of enemies) e.draw();
   if (boss) boss.draw();
   for (const f of fireballs) f.draw();
+  for (const c of lawyerCars) c.draw();
+  for (const d of sunroofDrops) d.draw();
   for (const s of playerShots) s.draw();
   for (const h of hammers) h.draw();
   for (const dp of deathParticles) {

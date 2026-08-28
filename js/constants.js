@@ -34,12 +34,13 @@ window.addEventListener('keydown', e => {
   }
   keys[e.code] = true;
   if (e.code === 'KeyR') restart();
-  if (e.code === 'Digit1') teleportToLevelStart(0);
-  if (e.code === 'Digit2') teleportToBoss(0);
-  if (e.code === 'Digit3') teleportToLevelStart(1);
-  if (e.code === 'Digit4') teleportToBoss(1);
-  if (e.code === 'Digit5') teleportToLevelStart(2);
-  if (e.code === 'Digit6') teleportToBoss(2);
+  // Level-select hotkeys: N = start of level N, Shift+N = that level's
+  // boss checkpoint. 0 = the boss-testing arena (not a real level).
+  if (e.code === 'Digit1') { if (e.shiftKey) teleportToBoss(0); else teleportToLevelStart(0); }
+  if (e.code === 'Digit2') { if (e.shiftKey) teleportToBoss(1); else teleportToLevelStart(1); }
+  if (e.code === 'Digit3') { if (e.shiftKey) teleportToBoss(2); else teleportToLevelStart(2); }
+  if (e.code === 'Digit4') { if (e.shiftKey) teleportToBoss(3); else teleportToLevelStart(3); }
+  if (e.code === 'Digit0') teleportToBoss(4);
   // secret cheat: Shift+G equips a fresh laser gun with 5 shots
   if (e.shiftKey && e.code === 'KeyG' && !won && lives > 0) {
     player.gunAmmo = 5;
