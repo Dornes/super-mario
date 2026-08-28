@@ -1230,3 +1230,207 @@ class LawyerBoss {
   }
 }
 
+// WindGust: the propeller's occasional ranged attack for HammerSquadBoss -
+// a fast, aimed burst of wind. Pushed into the shared `fireballs` array,
+// same as Bowser's Fireball and Kamek's MagicBolt, so it's picked up by the
+// existing generic projectile update/draw/collision handling.
+class WindGust {
+  constructor(x, y, vx, vy) {
+    this.x = x;
+    this.y = y;
+    this.w = 32;
+    this.h = 20;
+    this.vx = vx;
+    this.vy = vy;
+    this.t = 0;
+    this.dead = false;
+  }
+  update() {
+    this.x += this.vx;
+    this.y += this.vy;
+    this.t += 0.6;
+    if (this.x < camX - 250 || this.x > camX + canvas.width + 250 ||
+        this.y < -250 || this.y > canvas.height + 250) {
+      this.dead = true;
+    }
+  }
+  draw() {
+    const sx = this.x - camX;
+    if (sx < -70 || sx > canvas.width + 70) return;
+    ctx.save();
+    ctx.translate(sx + this.w / 2, this.y + this.h / 2);
+    ctx.rotate(Math.atan2(this.vy, this.vx));
+    ctx.strokeStyle = 'rgba(220,240,255,0.9)';
+    ctx.lineWidth = 3;
+    for (let i = 0; i < 3; i++) {
+      const off = (i - 1) * 7;
+      ctx.beginPath();
+      ctx.moveTo(-this.w / 2, off);
+      ctx.quadraticCurveTo(0, off + Math.sin(this.t + i) * 5, this.w / 2, off);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+}
+
+// HammerSquadBoss: level 4's boss. A rickety flying contraption - three
+// Hammer Bros (two winged fliers, one on-foot) riding in a basket slung
+// underneath a big spinning propeller. The three riders take turns doing
+// their regular Hammer Bro hammer-throw in sequence, and less often the
+// propeller itself winds up and fires a fast, aimed burst of wind. After
+// 4 hits the contraption breaks apart mid-air: the two flying Hammer Bros
+// keep flying under their own power while the grounded one drops and
+// falls to the floor. All three then become normal, individually
+// stompable/shootable enemies (pushed into the shared `enemies` array) -
+// the level isn't cleared until all three are defeated too.
+class HammerSquadBoss {
+  constructor(x, y) {
+    this.x = x;
+    this.y = y;
+    this.w = 130;
+    this.h = 80;
+    this.homeX = x;
+    this.homeY = y;
+    this.range = 140;
+    this.vx = 1.1;
+    this.bob = Math.random() * Math.PI * 2;
+    this.hp = 4;
+    this.maxHp = 4;
+    this.alive = true;
+    this.invuln = 0;
+    this.broken = false;
+    this.spawnedEnemies = [];
+    this.propAngle = 0;
+    this.turnCount = 0;
+    this.actionTimer = 70;
+    this.actionEvery = 65;
+    this.windTelegraph = 0; // >0 while the propeller winds up its wind burst
+  }
+  update() {
+    if (!this.alive) return;
+    this.propAngle += this.windTelegraph > 0 ? 1.8 : 0.9;
+    if (this.broken) {
+      // The contraption itself is gone - just wait for the three Hammer
+      // Bros it dropped to all be defeated before clearing the fight.
+      if (this.spawnedEnemies.length && this.spawnedEnemies.every(e => !e.alive)) {
+        this.alive = false;
+      }
+      return;
+    }
+    this.bob += 0.045;
+    this.x += this.vx;
+    this.y = this.homeY + Math.sin(this.bob) * 14;
+    if (this.x < this.homeX - this.range || this.x > this.homeX + this.range) this.vx *= -1;
+    if (this.invuln > 0) this.invuln--;
+
+    if (this.windTelegraph > 0) {
+      this.windTelegraph--;
+      if (this.windTelegraph === 0) {
+        const cx = this.x + this.w / 2, cy = this.y + this.h - 4;
+        const tx = player.x + player.w / 2, ty = player.y + player.h / 2;
+        const ang = Math.atan2(ty - cy, tx - cx);
+        const speed = 10.5;
+        fireballs.push(new WindGust(cx, cy, Math.cos(ang) * speed, Math.sin(ang) * speed));
+      }
+      return;
+    }
+
+    this.actionTimer--;
+    if (this.actionTimer <= 0) {
+      this.actionTimer = this.actionEvery;
+      const step = this.turnCount % 4;
+      this.turnCount++;
+      if (step === 3) {
+        // Less frequent than the riders' throws: the propeller winds up
+        // and fires a burst of wind aimed straight at Mario.
+        this.windTelegraph = 22;
+      } else {
+        // The three riders take their regular hammer-throw in sequence.
+        const dir = player.x < this.x ? -1 : 1;
+        const riderX = this.x + this.w * (0.2 + step * 0.3) - 8;
+        hammers.push(new Hammer(riderX, this.y + this.h * 0.42, dir));
+      }
+    }
+  }
+  // Called once hp hits 0: the contraption breaks apart and drops its
+  // three riders as regular, independently-defeatable enemies.
+  breakApart() {
+    this.broken = true;
+    spawnCrumble(this, ['#8a6a3a', '#6b6b6b', '#2e8b2e']);
+    const leftFlyer = new FlyingHammerBro(this.x + 6, this.y + 4, 100);
+    const rightFlyer = new FlyingHammerBro(this.x + this.w - 44, this.y + 4, 100);
+    const grounded = new HammerBro(this.x + this.w / 2 - 16, this.y, 80);
+    enemies.push(leftFlyer, rightFlyer, grounded);
+    this.spawnedEnemies = [leftFlyer, rightFlyer, grounded];
+  }
+  draw() {
+    if (!this.alive || this.broken) return;
+    const sx = this.x - camX;
+    if (sx < -140 || sx > canvas.width + 140) return;
+    if (this.invuln > 0 && Math.floor(this.invuln / 4) % 2 === 0) return;
+
+    const propY = this.y + 6;
+    const propCx = sx + this.w / 2;
+
+    // propeller mast
+    ctx.fillStyle = '#5a5a5a';
+    ctx.fillRect(propCx - 4, propY, 8, 16);
+
+    // spinning propeller blades
+    ctx.save();
+    ctx.translate(propCx, propY);
+    ctx.rotate(this.propAngle);
+    ctx.fillStyle = '#3a3a3a';
+    ctx.fillRect(-this.w * 0.42, -5, this.w * 0.84, 10);
+    ctx.fillRect(-5, -this.w * 0.3, 10, this.w * 0.6);
+    ctx.restore();
+    ctx.fillStyle = '#8a3a1a';
+    ctx.beginPath();
+    ctx.arc(propCx, propY, 8, 0, Math.PI * 2);
+    ctx.fill();
+
+    // basket/gondola
+    const basketY = this.y + this.h * 0.42;
+    const basketH = this.h * 0.58;
+    ctx.fillStyle = '#8a5a2b';
+    ctx.fillRect(sx, basketY, this.w, basketH);
+    ctx.strokeStyle = '#5a3a1a';
+    ctx.lineWidth = 2;
+    for (let i = 1; i < 4; i++) {
+      const lx = sx + (this.w / 4) * i;
+      ctx.beginPath();
+      ctx.moveTo(lx, basketY);
+      ctx.lineTo(lx, basketY + basketH);
+      ctx.stroke();
+    }
+    // suspension cables from propeller mast to basket corners
+    ctx.strokeStyle = '#3a3a3a';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(propCx, propY + 16);
+    ctx.lineTo(sx + 6, basketY);
+    ctx.moveTo(propCx, propY + 16);
+    ctx.lineTo(sx + this.w - 6, basketY);
+    ctx.stroke();
+
+    // three riders peeking over the basket rim
+    const riderW = 26, riderH = 30;
+    for (let i = 0; i < 3; i++) {
+      const rx = sx + this.w * (0.2 + i * 0.3) - riderW / 2;
+      const ry = basketY - riderH * 0.6;
+      drawHammerBroBody(rx, ry, riderW, riderH);
+    }
+
+    if (this.windTelegraph > 0) {
+      ctx.font = 'bold 22px sans-serif';
+      ctx.fillText('💨', propCx - 12, this.y - 14);
+    }
+
+    // HP bar
+    ctx.fillStyle = 'black';
+    ctx.fillRect(sx, this.y - 30, this.w, 8);
+    ctx.fillStyle = '#8a5a2b';
+    ctx.fillRect(sx, this.y - 30, this.w * (this.hp / this.maxHp), 8);
+  }
+}
+

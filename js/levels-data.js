@@ -161,13 +161,14 @@ const LEVELS = [
     ],
   },
   {
-    // No boss - the hardest bare gauntlet: bigger gaps, more enemies, and
-    // two gaps wide enough that they require stomping a hovering flying
-    // enemy mid-air (which resets the double jump) to chain jumps across.
+    // The hardest bare gauntlet leads into level 4's boss: the Hammer
+    // Squadron, a flying contraption carrying three Hammer Bros. Bigger
+    // gaps and more enemies along the way, including two gaps wide enough
+    // that they require stomping a hovering flying enemy mid-air (which
+    // resets the double jump) to chain jumps across.
     map: level4Map,
-    bossType: null,
-    bossName: null,
-    checkpointX: 5520,
+    bossType: 'hammersquad',
+    bossName: 'the Hammer Squadron',
     enemyPositions: [
       { x: 960, y: 440, range: 90 },
       { x: 1120, y: 440, range: 60, type: 'hammerbro' },

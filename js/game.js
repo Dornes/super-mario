@@ -249,6 +249,7 @@ function crumbleColors(entity) {
   if (entity instanceof KingBoo) return ['#f5f5f5', '#dedede', 'black'];
   if (entity instanceof Kamek) return ['#3a4fb0', '#e8d24a', '#c46f2a'];
   if (entity instanceof LawyerBoss) return ['#f2c229', '#3a3a3a', '#e8b98a'];
+  if (entity instanceof HammerSquadBoss) return ['#8a6a3a', '#6b6b6b', '#2e8b2e'];
   if (entity instanceof Player) return ['#e52521', '#0033cc', '#ffcc99'];
   return ['#999', '#666'];
 }
@@ -292,6 +293,8 @@ function initEnemies() {
       boss = new Kamek(flagTile.x - 190, groundY - 170);
     } else if (level.bossType === 'lawyer') {
       boss = new LawyerBoss(flagTile.x - 160, flagTile.y + flagTile.h - 80);
+    } else if (level.bossType === 'hammersquad') {
+      boss = new HammerSquadBoss(flagTile.x - 220, flagTile.y + flagTile.h - 190);
     } else {
       boss = new Bowser(flagTile.x - 150, flagTile.y + flagTile.h - 80);
     }
@@ -785,8 +788,11 @@ function checkWin() {
 
 function checkBoss() {
   if (!boss || !boss.alive) return;
-  const hittable = boss.visible === undefined || boss.visible;
-  if (rectsOverlap(player, boss)) {
+  // Once a HammerSquadBoss has broken apart it has no body left to
+  // collide with - its three dropped riders are plain enemies from here
+  // on, handled by checkEnemies()/checkPlayerShots() like any other foe.
+  const hittable = !boss.broken && (boss.visible === undefined || boss.visible);
+  if (!boss.broken && rectsOverlap(player, boss)) {
     const falling = player.vy > 0 && (player.y + player.h) - boss.y < 24;
     if (falling && boss.invuln === 0 && hittable) {
       boss.hp--;
@@ -796,8 +802,12 @@ function checkBoss() {
       score += 300;
       updateHud();
       if (boss.hp <= 0) {
-        boss.alive = false;
-        spawnCrumble(boss, crumbleColors(boss));
+        if (boss instanceof HammerSquadBoss) {
+          boss.breakApart();
+        } else {
+          boss.alive = false;
+          spawnCrumble(boss, crumbleColors(boss));
+        }
         score += 2000;
         updateHud();
         if (boss instanceof LawyerBoss) stopBossMusic();
@@ -879,14 +889,18 @@ function checkPlayerShots() {
       }
     }
     if (s.dead) continue;
-    if (boss && boss.alive) {
+    if (boss && boss.alive && !boss.broken) {
       const hittable = boss.visible === undefined || boss.visible;
       if (hittable && boss.invuln === 0 && rectsOverlap(s, boss)) {
         boss.hp--;
         s.dead = true;
         if (boss.hp <= 0) {
-          boss.alive = false;
-          spawnCrumble(boss, crumbleColors(boss));
+          if (boss instanceof HammerSquadBoss) {
+            boss.breakApart();
+          } else {
+            boss.alive = false;
+            spawnCrumble(boss, crumbleColors(boss));
+          }
           if (boss instanceof LawyerBoss) stopBossMusic();
         }
       }
