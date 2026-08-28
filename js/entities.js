@@ -1275,8 +1275,10 @@ class WindGust {
 
 // HammerSquadBoss: level 4's boss. A rickety flying contraption - three
 // Hammer Bros (two winged fliers, one on-foot) riding in a basket slung
-// underneath a big spinning propeller. The three riders take turns doing
-// their regular Hammer Bro hammer-throw in sequence, and less often the
+// underneath a big spinning propeller. Each rider does their regular
+// Hammer Bro hammer-throw on its own fast, independently-jittered timer
+// (rather than a fixed round-robin), so their combined attack rhythm
+// overlaps unpredictably. Less often, and on its own separate timer, the
 // propeller itself winds up and fires a fast, aimed burst of wind. After
 // 4 hits the contraption breaks apart mid-air: the two flying Hammer Bros
 // keep flying under their own power while the grounded one drops and
@@ -1301,9 +1303,15 @@ class HammerSquadBoss {
     this.broken = false;
     this.spawnedEnemies = [];
     this.propAngle = 0;
-    this.turnCount = 0;
-    this.actionTimer = 70;
-    this.actionEvery = 65;
+    // Each rider throws on its own independent, jittered timer (instead of
+    // a shared round-robin), so the three overlap unpredictably rather
+    // than firing in a fixed, learnable sequence.
+    this.riders = [0, 1, 2].map(() => ({
+      throwEvery: 46 + Math.floor(Math.random() * 22), // ~46-67 frames apart
+      throwTimer: Math.floor(Math.random() * 60), // randomized initial stagger
+    }));
+    this.windTimer = 160 + Math.floor(Math.random() * 60);
+    this.windEvery = 230;
     this.windTelegraph = 0; // >0 while the propeller winds up its wind burst
   }
   update() {
@@ -1335,19 +1343,24 @@ class HammerSquadBoss {
       return;
     }
 
-    this.actionTimer--;
-    if (this.actionTimer <= 0) {
-      this.actionTimer = this.actionEvery;
-      const step = this.turnCount % 4;
-      this.turnCount++;
-      if (step === 3) {
-        // Less frequent than the riders' throws: the propeller winds up
-        // and fires a burst of wind aimed straight at Mario.
-        this.windTelegraph = 22;
-      } else {
-        // The three riders take their regular hammer-throw in sequence.
-        const dir = player.x < this.x ? -1 : 1;
-        const riderX = this.x + this.w * (0.2 + step * 0.3) - 8;
+    // Propeller wind burst: on its own separate, slower timer than the
+    // riders' hammer throws, so it stays the rarer of the two attacks.
+    this.windTimer--;
+    if (this.windTimer <= 0) {
+      this.windTimer = this.windEvery + Math.floor(Math.random() * 80) - 40;
+      this.windTelegraph = 22;
+      return;
+    }
+
+    // Each rider throws independently whenever its own timer elapses,
+    // re-jittering afterward so the three never settle into lockstep.
+    const dir = player.x < this.x ? -1 : 1;
+    for (let i = 0; i < this.riders.length; i++) {
+      const r = this.riders[i];
+      r.throwTimer--;
+      if (r.throwTimer <= 0) {
+        r.throwTimer = r.throwEvery + Math.floor(Math.random() * 22) - 11;
+        const riderX = this.x + this.w * (0.2 + i * 0.3) - 8;
         hammers.push(new Hammer(riderX, this.y + this.h * 0.42, dir));
       }
     }
