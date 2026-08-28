@@ -1260,15 +1260,37 @@ class WindGust {
     ctx.save();
     ctx.translate(sx + this.w / 2, this.y + this.h / 2);
     ctx.rotate(Math.atan2(this.vy, this.vx));
-    ctx.strokeStyle = 'rgba(220,240,255,0.9)';
-    ctx.lineWidth = 3;
-    for (let i = 0; i < 3; i++) {
-      const off = (i - 1) * 7;
+
+    // soft misty body so it reads as a puff of moving air, not just lines
+    const grad = ctx.createLinearGradient(-this.w / 2, 0, this.w / 2, 0);
+    grad.addColorStop(0, 'rgba(220,240,255,0)');
+    grad.addColorStop(0.55, 'rgba(220,240,255,0.3)');
+    grad.addColorStop(1, 'rgba(255,255,255,0.55)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, this.w / 2, this.h / 2, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // curling wavy streak lines for texture, fading out toward the tail
+    ctx.lineWidth = 2.5;
+    for (let i = 0; i < 4; i++) {
+      const off = (i - 1.5) * 6;
+      ctx.strokeStyle = 'rgba(230,245,255,' + (0.85 - i * 0.15) + ')';
       ctx.beginPath();
       ctx.moveTo(-this.w / 2, off);
-      ctx.quadraticCurveTo(0, off + Math.sin(this.t + i) * 5, this.w / 2, off);
+      for (let p = -this.w / 2; p <= this.w / 2; p += this.w / 6) {
+        ctx.lineTo(p, off + Math.sin(this.t + i + p * 0.15) * 4);
+      }
       ctx.stroke();
     }
+
+    // small curling swirl right at the leading edge
+    ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(this.w / 2 - 5, 0, 5, this.t, this.t + Math.PI * 1.4);
+    ctx.stroke();
+
     ctx.restore();
   }
 }
@@ -1289,8 +1311,8 @@ class HammerSquadBoss {
   constructor(x, y) {
     this.x = x;
     this.y = y;
-    this.w = 130;
-    this.h = 80;
+    this.w = 104;
+    this.h = 62;
     this.homeX = x;
     this.homeY = y;
     this.range = 140;
@@ -1382,57 +1404,71 @@ class HammerSquadBoss {
     if (sx < -140 || sx > canvas.width + 140) return;
     if (this.invuln > 0 && Math.floor(this.invuln / 4) % 2 === 0) return;
 
-    const propY = this.y + 6;
     const propCx = sx + this.w / 2;
 
-    // propeller mast
-    ctx.fillStyle = '#5a5a5a';
-    ctx.fillRect(propCx - 4, propY, 8, 16);
-
-    // spinning propeller blades
-    ctx.save();
-    ctx.translate(propCx, propY);
-    ctx.rotate(this.propAngle);
-    ctx.fillStyle = '#3a3a3a';
-    ctx.fillRect(-this.w * 0.42, -5, this.w * 0.84, 10);
-    ctx.fillRect(-5, -this.w * 0.3, 10, this.w * 0.6);
-    ctx.restore();
-    ctx.fillStyle = '#8a3a1a';
-    ctx.beginPath();
-    ctx.arc(propCx, propY, 8, 0, Math.PI * 2);
-    ctx.fill();
-
-    // basket/gondola
-    const basketY = this.y + this.h * 0.42;
-    const basketH = this.h * 0.58;
+    // basket/gondola - rounded on the bottom corners
+    const basketY = this.y;
+    const basketH = this.h * 0.62;
+    const r = 10;
     ctx.fillStyle = '#8a5a2b';
-    ctx.fillRect(sx, basketY, this.w, basketH);
+    ctx.beginPath();
+    ctx.moveTo(sx, basketY);
+    ctx.lineTo(sx + this.w, basketY);
+    ctx.lineTo(sx + this.w, basketY + basketH - r);
+    ctx.quadraticCurveTo(sx + this.w, basketY + basketH, sx + this.w - r, basketY + basketH);
+    ctx.lineTo(sx + r, basketY + basketH);
+    ctx.quadraticCurveTo(sx, basketY + basketH, sx, basketY + basketH - r);
+    ctx.closePath();
+    ctx.fill();
     ctx.strokeStyle = '#5a3a1a';
     ctx.lineWidth = 2;
     for (let i = 1; i < 4; i++) {
       const lx = sx + (this.w / 4) * i;
       ctx.beginPath();
       ctx.moveTo(lx, basketY);
-      ctx.lineTo(lx, basketY + basketH);
+      ctx.lineTo(lx, basketY + basketH - r * 0.4);
       ctx.stroke();
     }
-    // suspension cables from propeller mast to basket corners
-    ctx.strokeStyle = '#3a3a3a';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(propCx, propY + 16);
-    ctx.lineTo(sx + 6, basketY);
-    ctx.moveTo(propCx, propY + 16);
-    ctx.lineTo(sx + this.w - 6, basketY);
-    ctx.stroke();
 
     // three riders peeking over the basket rim
-    const riderW = 26, riderH = 30;
+    const riderW = 24, riderH = 26;
     for (let i = 0; i < 3; i++) {
       const rx = sx + this.w * (0.2 + i * 0.3) - riderW / 2;
       const ry = basketY - riderH * 0.6;
       drawHammerBroBody(rx, ry, riderW, riderH);
     }
+
+    // propeller, mounted underneath the basket and aimed downward - the
+    // lift (and the wind-burst attack) both come from below the basket
+    const mastTopY = basketY + basketH;
+    const propHubY = this.y + this.h - 4;
+    ctx.strokeStyle = '#3a3a3a';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(propCx, mastTopY);
+    ctx.lineTo(propCx, propHubY);
+    ctx.stroke();
+
+    // spinning rotor disc, foreshortened to read as spinning flat beneath
+    // the contraption (like a helicopter rotor seen edge-on)
+    const spin = Math.abs(Math.cos(this.propAngle));
+    ctx.save();
+    ctx.translate(propCx, propHubY);
+    ctx.fillStyle = 'rgba(58,58,58,' + (0.3 + spin * 0.4) + ')';
+    ctx.beginPath();
+    ctx.ellipse(0, 0, this.w * 0.46, 5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#3a3a3a';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(-this.w * 0.44 * spin, 0);
+    ctx.lineTo(this.w * 0.44 * spin, 0);
+    ctx.stroke();
+    ctx.restore();
+    ctx.fillStyle = '#8a3a1a';
+    ctx.beginPath();
+    ctx.arc(propCx, propHubY, 6, 0, Math.PI * 2);
+    ctx.fill();
 
     if (this.windTelegraph > 0) {
       ctx.font = 'bold 22px sans-serif';
