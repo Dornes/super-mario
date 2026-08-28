@@ -78,6 +78,27 @@ const level4Map = [
 "1111111111111111   1111111111111    11111111111111   111111111111       111111111111111     1111111111111    1111111111111111          11111111111111   111111111111111111"
 ];
 
+// Small, deliberately plain flat arena used only for boss testing/tuning -
+// not a real level, so it's never reached by finishing another level (see
+// REAL_LEVEL_COUNT below). Rendered with a neutral gray "test chamber"
+// palette instead of the normal grass/sky theme (see drawBackground/
+// drawTiles' testTheme branch in game.js).
+const bossTestMap = [
+"                                  ",
+"                                  ",
+"                                  ",
+"                                  ",
+"                                  ",
+"                                  ",
+"                              3   ",
+"                                  ",
+"                                  ",
+"                                  ",
+"                                  ",
+"                                  ",
+"1111111111111111111111111111111111",
+];
+
 const LEVELS = [
 
   {
@@ -140,12 +161,12 @@ const LEVELS = [
     ],
   },
   {
-    // Sy Loophole - a fast-talking, cut-rate lawyer in a cheap yellow suit.
-    // "Loophole Lunge": a yellow beater sedan barrels across the screen.
-    // "Sunroof Surprise": a comedic brown "surprise" drops from above.
+    // No boss - the hardest bare gauntlet: bigger gaps, more enemies, and
+    // two gaps wide enough that they require stomping a hovering flying
+    // enemy mid-air (which resets the double jump) to chain jumps across.
     map: level4Map,
-    bossType: 'lawyer',
-    bossName: 'Sy Loophole',
+    bossType: null,
+    bossName: null,
     checkpointX: 5520,
     enemyPositions: [
       { x: 960, y: 440, range: 90 },
@@ -173,4 +194,21 @@ const LEVELS = [
       { x: 6240, y: 260, range: 180, type: 'flying' },
     ],
   },
+  {
+    // Boss-testing arena only, reached via the "0" hotkey - not part of the
+    // normal level progression (see REAL_LEVEL_COUNT). Sy Loophole didn't
+    // fit the game's theme as a real level boss, so he lives here instead
+    // for tuning/testing his attacks in isolation.
+    map: bossTestMap,
+    theme: 'test',
+    isTest: true,
+    bossType: 'lawyer',
+    bossName: 'Sy Loophole',
+    enemyPositions: [],
+  },
 ];
+
+// Real, in-order levels only (excludes the boss-testing arena) - used to
+// decide when finishing a level should advance to the next one vs. show
+// the "you won the game" screen.
+const REAL_LEVEL_COUNT = LEVELS.filter(l => !l.isTest).length;

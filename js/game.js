@@ -179,9 +179,11 @@ let lawyerCars = [];
 let sunroofDrops = [];
 
 // Boss theme for Sy Loophole (level 4). Starts on the last 3 seconds of the
-// track the instant he spawns, then loops the full track from the top for
-// as long as he's alive.
+// track the moment he first scrolls into view (not the instant he spawns
+// off-screen), then loops the full track from the top for as long as he's
+// alive.
 const bossMusic = new Audio('sounds/lawyer-boss-theme.mp3');
+let bossMusicActive = false;
 bossMusic.addEventListener('ended', () => {
   if (boss instanceof LawyerBoss && boss.alive) {
     bossMusic.currentTime = 0;
@@ -201,8 +203,19 @@ function startBossMusic() {
   }
 }
 function stopBossMusic() {
+  bossMusicActive = false;
   bossMusic.pause();
   bossMusic.currentTime = 0;
+}
+// Kicks off the boss theme the first time Sy Loophole is actually visible
+// within the camera's view, rather than as soon as he's spawned off-screen.
+function updateBossMusicTrigger() {
+  if (bossMusicActive || !(boss instanceof LawyerBoss) || !boss.alive) return;
+  const sx = boss.x - camX;
+  if (sx + boss.w > 0 && sx < canvas.width) {
+    bossMusicActive = true;
+    startBossMusic();
+  }
 }
 
 // spawns a short crumble-apart animation of small debris chunks at an
@@ -286,7 +299,7 @@ function initEnemies() {
     boss = null;
   }
   if (boss instanceof LawyerBoss) {
-    startBossMusic();
+    bossMusicActive = false; // wait until he's actually on screen to start the music
   } else {
     stopBossMusic();
   }
@@ -462,22 +475,50 @@ function drawCloud(cx, cy, scale, variant) {
 }
 
 function drawBackground() {
-  ctx.fillStyle = '#5c94fc';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  // clouds: bigger than before, cycling through a few distinct shapes/sizes
-  for (let i = 0; i < 6; i++) {
-    const cx = (i * 300 - camX * 0.3) % (levelWidth + 300);
-    const variant = i % CLOUD_VARIANTS.length;
-    const scale = 1.1 + (i % 3) * 0.2;
-    drawCloud(cx + 100, 60 + (i % 3) * 20, scale, variant);
+  const testTheme = LEVELS[currentLevelIndex].theme === 'test';
+  if (testTheme) {
+    // Neutral gray "test chamber" backdrop - deliberately not the game's
+    // normal sky/grass look, so this reads as an out-of-theme testing area.
+    ctx.fillStyle = '#3a3f44';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+    ctx.lineWidth = 1;
+    const gridStep = 80;
+    for (let gx = -((camX * 0.3) % gridStep); gx < canvas.width; gx += gridStep) {
+      ctx.beginPath();
+      ctx.moveTo(gx, 0);
+      ctx.lineTo(gx, canvas.height);
+      ctx.stroke();
+    }
+    for (let gy = 0; gy < canvas.height; gy += gridStep) {
+      ctx.beginPath();
+      ctx.moveTo(0, gy);
+      ctx.lineTo(canvas.width, gy);
+      ctx.stroke();
+    }
+  } else {
+    ctx.fillStyle = '#5c94fc';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    // clouds: bigger than before, cycling through a few distinct shapes/sizes
+    for (let i = 0; i < 6; i++) {
+      const cx = (i * 300 - camX * 0.3) % (levelWidth + 300);
+      const variant = i % CLOUD_VARIANTS.length;
+      const scale = 1.1 + (i % 3) * 0.2;
+      drawCloud(cx + 100, 60 + (i % 3) * 20, scale, variant);
+    }
   }
   // Dark "void" band at the level of the main ground row, drawn behind the
   // tiles: solid ground tiles draw over it, but pits/gaps show this instead
   // of plain sky, so holes in the floor are obvious at a glance.
   const groundY = (LEVELS[currentLevelIndex].map.length - 1) * TILE;
   const grad = ctx.createLinearGradient(0, groundY, 0, canvas.height);
-  grad.addColorStop(0, '#241505');
-  grad.addColorStop(1, '#050208');
+  if (testTheme) {
+    grad.addColorStop(0, '#1c1f22');
+    grad.addColorStop(1, '#050607');
+  } else {
+    grad.addColorStop(0, '#241505');
+    grad.addColorStop(1, '#050208');
+  }
   ctx.fillStyle = grad;
   ctx.fillRect(0, groundY, canvas.width, canvas.height - groundY);
 }
@@ -492,6 +533,7 @@ function drawTiles() {
     drawTiles._level = currentLevelIndex;
   }
   const groundSet = drawTiles._set;
+  const testTheme = LEVELS[currentLevelIndex].theme === 'test';
   for (const t of solidTiles) {
     const sx = t.x - camX;
     if (sx < -TILE || sx > canvas.width) continue;
@@ -525,6 +567,18 @@ function drawTiles() {
         ctx.lineTo(sx + t.w / 2 + 8, t.y + 8);
         ctx.lineTo(sx + t.w / 2, t.y + 20);
         ctx.fill();
+      }
+    } else if (testTheme) {
+      // Plain neutral gray blocks for the boss-testing arena - no
+      // grass/dirt texture, just a flat gray slab with a faint top edge.
+      ctx.fillStyle = '#5a6168';
+      ctx.fillRect(sx, t.y, t.w, t.h);
+      ctx.strokeStyle = '#33383d';
+      ctx.strokeRect(sx, t.y, t.w, t.h);
+      const hasAbove = groundSet.has(t.x + ',' + (t.y - TILE));
+      if (!hasAbove) {
+        ctx.fillStyle = '#787f86';
+        ctx.fillRect(sx, t.y, t.w, 6);
       }
     } else {
       ctx.fillStyle = '#c2701d';
@@ -703,14 +757,24 @@ function checkWin() {
   if (won || !flagTile) return;
   if (boss && boss.alive) return; // must defeat the boss first
   if (player.x + player.w > flagTile.x) {
-    if (currentLevelIndex < LEVELS.length - 1) {
+    const level = LEVELS[currentLevelIndex];
+    if (level.isTest) {
+      // Boss-testing arena: never chains into another level or the
+      // "you won the game" screen, it just confirms the run.
+      won = true;
+      score += 1000;
+      updateHud();
+      showOverlay('🧪 Boss-test fullført! Poeng: ' + score + '  (trykk R for å restarte)');
+      return;
+    }
+    if (currentLevelIndex < REAL_LEVEL_COUNT - 1) {
       nextLevel();
       return;
     }
     won = true;
     score += 1000;
     updateHud();
-    const bossName = LEVELS[currentLevelIndex].bossName;
+    const bossName = level.bossName;
     if (bossName) {
       showOverlay('🎉 Du beseiret ' + bossName + ' og vant hele spillet! Poeng: ' + score + '  (trykk R for å spille igjen)');
     } else {
@@ -882,6 +946,7 @@ function loop() {
     camX = player.x - canvas.width / 2 + player.w / 2;
     if (camX < 0) camX = 0;
     if (camX > levelWidth - canvas.width) camX = levelWidth - canvas.width;
+    updateBossMusicTrigger();
   }
 
   for (const dp of deathParticles) {
