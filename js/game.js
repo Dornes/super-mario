@@ -14,6 +14,7 @@ let stars = [];
 let pipeWarps = [];
 let warpCooldown = 0;
 let powerups = [];
+let gravityPads = [];
 
 function buildLevel() {
   coinTiles = [];
@@ -23,6 +24,7 @@ function buildLevel() {
   pipeWarps = [];
   warpCooldown = 0;
   powerups = [];
+  gravityPads = [];
   const levelMap = LEVELS[currentLevelIndex].map;
   levelWidth = levelMap[0].length * TILE;
   let flagCol = null;
@@ -33,15 +35,34 @@ function buildLevel() {
       const y = row * TILE;
       if (ch === '1' || ch === '4') {
         solidTiles.push({x, y, w: TILE, h: TILE, pipe: ch === '4'});
+      } else if (ch === 'c') {
+        // Ceiling platform tile (space levels' gravity-flip sections):
+        // collides exactly like '1', just rendered upside-down (see
+        // drawTiles' spaceTheme branch) since its walkable/exposed face is
+        // the underside, not the top.
+        solidTiles.push({x, y, w: TILE, h: TILE, pipe: false, ceiling: true});
       } else if (ch === 'q') {
         solidTiles.push({x, y, w: TILE, h: TILE, pipe: false, itemBlock: true, used: false});
       } else if (ch === '2') {
         coinTiles.push({x: x + 8, y: y + 8, w: 24, h: 24, taken: false});
       } else if (ch === '3') {
         flagCol = col;
+      } else if (ch === 'g' || ch === 'k') {
+        // Gravity-flip pad: 'g' flips the player to upside-down gravity,
+        // 'k' flips it back to normal. Each pad only triggers when the
+        // player's current gravity state doesn't already match its target,
+        // so standing on it afterward doesn't re-trigger every frame.
+        gravityPads.push({x, y: y + 4, w: TILE, h: TILE - 8, target: ch === 'g'});
       }
     }
   }
+  // Toggle a class on <html> and <body> so the page background (outside
+  // the canvas) goes dark on space-themed levels instead of the default
+  // sky blue. Both elements are toggled since body's box may not always
+  // cover the full viewport height, leaving html's background visible.
+  const isSpace = LEVELS[currentLevelIndex].theme === 'space';
+  document.documentElement.classList.toggle('space-theme', isSpace);
+  document.body.classList.toggle('space-theme', isSpace);
   if (flagCol !== null) {
     // Find the actual ground surface below the flag marker (the topmost
     // solid tile in that column) so the pole always reaches down to it,
@@ -273,12 +294,18 @@ let won = false;
 function initEnemies() {
   const level = LEVELS[currentLevelIndex];
   enemies = level.enemyPositions.map(p => {
-    if (p.type === 'hammerbro') return new HammerBro(p.x, p.y, p.range);
-    if (p.type === 'flying') return new FlyingEnemy(p.x, p.y, p.range);
-    if (p.type === 'flying-hammerbro') return new FlyingHammerBro(p.x, p.y, p.range);
-    if (p.type === 'robot') return new SpaceRobot(p.x, p.y, p.range);
-    if (p.type === 'ufo') return new UFO(p.x, p.y, p.range);
-    return new Enemy(p.x, p.y, p.range);
+    let e;
+    if (p.type === 'hammerbro') e = new HammerBro(p.x, p.y, p.range);
+    else if (p.type === 'flying') e = new FlyingEnemy(p.x, p.y, p.range);
+    else if (p.type === 'flying-hammerbro') e = new FlyingHammerBro(p.x, p.y, p.range);
+    else if (p.type === 'robot') e = new SpaceRobot(p.x, p.y, p.range);
+    else if (p.type === 'ufo') e = new UFO(p.x, p.y, p.range);
+    else e = new Enemy(p.x, p.y, p.range);
+    // Ceiling-patrol enemies in a space level's gravity-flip section: walk
+    // upside down on the underside of the ceiling platforms, same as they'd
+    // patrol a normal floor, just with gravity/collision mirrored.
+    if (p.flipped) e.gravityFlipped = true;
+    return e;
   });
   fireballs = [];
   playerShots = [];
@@ -347,6 +374,14 @@ function updateHud() {
   livesEl.textContent = lives;
   scoreEl.textContent = score;
   coinsEl.textContent = coins;
+  // Space levels swap the coin icon for a small icon that mirrors the
+  // in-level glowing cyan energy-crystal coin (see drawCoins' spaceTheme
+  // branch) instead of the default gold-coin emoji; tracker text stays
+  // plain white like every other level.
+  const spaceTheme = LEVELS[currentLevelIndex].theme === 'space';
+  coinIconEl.innerHTML = spaceTheme
+    ? '<svg width="16" height="16" viewBox="0 0 16 16" style="vertical-align:-3px;"><circle cx="8" cy="8" r="7" fill="#5fe6e6" stroke="#146470" stroke-width="1.5"/><circle cx="5.8" cy="5.8" r="2" fill="rgba(255,255,255,0.55)"/></svg>'
+    : '🪙';
   const ammoRow = document.getElementById('ammoRow');
   const ammoEl = document.getElementById('ammo');
   if (player.gunAmmo > 0) {
@@ -501,7 +536,7 @@ function drawBackground() {
       const r = 1 + (i % 3);
       ctx.fillRect(wx, sy, r, r);
     }
-    const planetColors = ['#c46f2a', '#4fc4c4', '#c44f8a'];
+    const planetColors = ['#fae38e', '#e8e8f0', '#c44f8a'];
     for (let i = 0; i < 3; i++) {
       const px = (i * 500 + 200 - camX * 0.05) % (levelWidth + 500);
       const wx = px < 0 ? px + levelWidth + 500 : px;
@@ -577,14 +612,16 @@ function drawTiles() {
     if (sx < -TILE || sx > canvas.width) continue;
     if (t.itemBlock) {
       if (t.used) {
-        ctx.fillStyle = '#8a7a6a';
+        ctx.fillStyle = spaceTheme ? '#3a4550' : '#8a7a6a';
         ctx.fillRect(sx, t.y, t.w, t.h);
-        ctx.strokeStyle = '#5a4d40';
+        ctx.strokeStyle = spaceTheme ? '#1e2530' : '#5a4d40';
         ctx.strokeRect(sx, t.y, t.w, t.h);
       } else {
-        ctx.fillStyle = '#f2a71b';
+        // Space level swaps the classic orange "?" block for a cyan
+        // metallic one, matching the space-station platform palette.
+        ctx.fillStyle = spaceTheme ? '#2fb8c9' : '#f2a71b';
         ctx.fillRect(sx, t.y, t.w, t.h);
-        ctx.strokeStyle = '#a56c0a';
+        ctx.strokeStyle = spaceTheme ? '#146470' : '#a56c0a';
         ctx.lineWidth = 2;
         ctx.strokeRect(sx + 1, t.y + 1, t.w - 2, t.h - 2);
         ctx.fillStyle = '#fff';
@@ -625,14 +662,27 @@ function drawTiles() {
       ctx.fillRect(sx, t.y, t.w, t.h);
       ctx.strokeStyle = '#1e2130';
       ctx.strokeRect(sx, t.y, t.w, t.h);
-      ctx.fillStyle = 'rgba(255,255,255,0.06)';
-      ctx.fillRect(sx + 4, t.y + 4, t.w - 8, 3);
-      const hasAbove = groundSet.has(t.x + ',' + (t.y - TILE));
-      if (!hasAbove) {
+      if (t.ceiling) {
+        // Ceiling platform: the exact same plating, but mirrored - the
+        // faint highlight strip and glowing edge sit on the BOTTOM (the
+        // side facing the gravity-flipped player walking underneath),
+        // instead of the top.
+        ctx.fillStyle = 'rgba(255,255,255,0.06)';
+        ctx.fillRect(sx + 4, t.y + t.h - 7, t.w - 8, 3);
         ctx.fillStyle = '#5fe6e6';
-        ctx.fillRect(sx, t.y, t.w, 5);
+        ctx.fillRect(sx, t.y + t.h - 5, t.w, 5);
         ctx.fillStyle = 'rgba(95,230,230,0.35)';
-        ctx.fillRect(sx, t.y + 5, t.w, 4);
+        ctx.fillRect(sx, t.y + t.h - 9, t.w, 4);
+      } else {
+        ctx.fillStyle = 'rgba(255,255,255,0.06)';
+        ctx.fillRect(sx + 4, t.y + 4, t.w - 8, 3);
+        const hasAbove = groundSet.has(t.x + ',' + (t.y - TILE));
+        if (!hasAbove) {
+          ctx.fillStyle = '#5fe6e6';
+          ctx.fillRect(sx, t.y, t.w, 5);
+          ctx.fillStyle = 'rgba(95,230,230,0.35)';
+          ctx.fillRect(sx, t.y + 5, t.w, 4);
+        }
       }
     } else {
       ctx.fillStyle = '#c2701d';
@@ -693,16 +743,62 @@ function drawStars() {
 }
 
 function drawCoins() {
+  const spaceTheme = LEVELS[currentLevelIndex].theme === 'space';
   for (const c of coinTiles) {
     if (c.taken) continue;
     const sx = c.x - camX;
     if (sx < -30 || sx > canvas.width) continue;
-    ctx.fillStyle = '#ffd700';
+    if (spaceTheme) {
+      // Glowing cyan energy crystal instead of a gold coin, matching the
+      // space-station platform/item-block palette.
+      ctx.fillStyle = '#5fe6e6';
+      ctx.beginPath();
+      ctx.arc(sx + c.w / 2, c.y + c.h / 2, c.w / 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#146470';
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,0.55)';
+      ctx.beginPath();
+      ctx.arc(sx + c.w / 2 - 3, c.y + c.h / 2 - 3, c.w / 5, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      ctx.fillStyle = '#ffd700';
+      ctx.beginPath();
+      ctx.arc(sx + c.w / 2, c.y + c.h / 2, c.w / 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#b8860b';
+      ctx.stroke();
+    }
+  }
+}
+
+function drawGravityPads() {
+  // Glowing pad with an arrow pointing whichever way it will send gravity
+  // ('g' pads point away from the current floor, 'k' pads point back).
+  for (const p of gravityPads) {
+    const sx = p.x - camX;
+    if (sx < -TILE || sx > canvas.width) continue;
+    const flipToUp = p.target; // true = pad flips gravity so the player falls upward
+    ctx.fillStyle = flipToUp ? 'rgba(95,230,230,0.28)' : 'rgba(242,167,27,0.28)';
+    ctx.fillRect(sx, p.y, p.w, p.h);
+    ctx.strokeStyle = flipToUp ? '#5fe6e6' : '#f2a71b';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(sx + 1, p.y + 1, p.w - 2, p.h - 2);
+    const cx = sx + p.w / 2;
+    const cy = p.y + p.h / 2;
+    ctx.fillStyle = flipToUp ? '#5fe6e6' : '#f2a71b';
     ctx.beginPath();
-    ctx.arc(sx + c.w / 2, c.y + c.h / 2, c.w / 2, 0, Math.PI * 2);
+    if (flipToUp) {
+      ctx.moveTo(cx, cy - 8);
+      ctx.lineTo(cx - 8, cy + 6);
+      ctx.lineTo(cx + 8, cy + 6);
+    } else {
+      ctx.moveTo(cx, cy + 8);
+      ctx.lineTo(cx - 8, cy - 6);
+      ctx.lineTo(cx + 8, cy - 6);
+    }
+    ctx.closePath();
     ctx.fill();
-    ctx.strokeStyle = '#b8860b';
-    ctx.stroke();
   }
 }
 
@@ -779,6 +875,18 @@ function checkCoins() {
       coins++;
       score += 100;
       updateHud();
+    }
+  }
+}
+
+function checkGravityPads() {
+  for (const p of gravityPads) {
+    if (player.gravityFlipped === p.target) continue;
+    if (rectsOverlap(player, p)) {
+      player.gravityFlipped = p.target;
+      player.vy = 0;
+      player.onGround = false;
+      player.jumpsUsed = 0;
     }
   }
 }
@@ -998,6 +1106,7 @@ function loop() {
     for (const h of hammers) h.update();
     hammers = hammers.filter(h => !h.dead);
     checkCoins();
+    checkGravityPads();
     checkCheckpoint();
     checkPipeWarp();
     checkStars();
@@ -1026,6 +1135,7 @@ function loop() {
   drawBackground();
   drawTiles();
   drawCoins();
+  drawGravityPads();
   drawStars();
   drawCheckpoint();
   drawFlag();

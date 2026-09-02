@@ -1,6 +1,8 @@
   html, body {
     margin: 0;
     padding: 0;
+    height: 100%;
+    min-height: 100vh;
     background: #5c94fc;
     display: flex;
     flex-direction: column;
@@ -8,6 +10,9 @@
     font-family: 'Courier New', monospace;
     color: white;
     overflow: hidden;
+  }
+  html.space-theme, body.space-theme {
+    background: #05010f;
   }
   #hud {
     display: flex;

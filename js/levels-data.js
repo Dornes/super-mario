@@ -1,6 +1,8 @@
 // ASCII level layouts and the LEVELS config array (per-level map,
 // boss, enemy placements, checkpoint data, etc.)
-// Level layout: 0 = empty, 1 = ground/brick, 2 = coin, 3 = flag(goal), 4 = pipe
+// Level layout: 0 = empty, 1 = ground/brick, 2 = coin, 3 = flag(goal), 4 = pipe,
+// q = "?" item block, g = gravity-flip-on pad, k = gravity-flip-off pad
+// (space levels only - see the gravity-pad branch in buildLevel() in game.js)
 const level1Map = [
 "                                                                                                    ",
 "                                                                                                    ",
@@ -85,12 +87,22 @@ const level4Map = [
 // need a hovering enemy bounce to cross) so every jump stays within the
 // player's validated physics. Introduces two new enemy types: the ground-
 // patrolling Space Robot ('robot') and the hovering, laser-firing UFO
-// ('ufo') - see entities.js. No boss yet: the flat stretch right before the
-// flag is the reserved boss room, deliberately left empty (see
-// initEnemies() in game.js - bossType: null means no boss spawns there).
+// ('ufo') - see entities.js.
+//
+// Middle of the map (cols 85-119) is this level's showcase gravity-flip
+// section: a 30-tile floor pit far too wide to jump, crossed by stepping on
+// the 'g' pad to flip gravity, then walking upside-down along four ceiling
+// platforms ('c' tiles, rendered with flipped plating in drawTiles) split
+// by three gaps that each require a real jump while upside down. Ground
+// SpaceRobots patrol the first three ceiling segments (gravityFlipped:
+// true in enemyPositions) exactly like they'd patrol a normal floor.
+// Stepping on the 'k' pad near the end of the last segment flips gravity
+// back to normal, dropping the player safely onto the floor once it
+// resumes at col 115. The reserved boss room right before the flag is
+// still just flat, empty floor - no boss lives here yet.
 const level5Map = [
-"                                                                                                                                                                                                         ",
-"                                                                                                                                                                                                         ",
+"                                                                                     ccccccc    ccccccc   ccccccc    ccc                                                                                 ",
+"                                                                                                   2         2        k                                                                                  ",
 "                                                                                                                                                                                                         ",
 "                    2 2 2                                                                                                                                                                                ",
 "                                        11                                                  2 2 2                                                     11                                                 ",
@@ -98,10 +110,10 @@ const level5Map = [
 "                                                       2 2 2                                                                          2 2 2                                                3             ",
 "                                                                            q                                                                                                                            ",
 "                                                                                                                                                           2 2 2                                         ",
-"                                                                                                            11                                                                                           ",
 "                                                                                                                                                                                                         ",
 "                                                                                                                                                                                                         ",
-"11111111111111   111111111111    1111111111111111     1111111111       11111111111111   111111111111    111111111111111111          11111111111111   1111111111111111111111111111111111111111111111111111"
+"                                                                                    g                                                                                                                    ",
+"11111111111111   111111111111    1111111111111111     1111111111       11111111111111                              1111111          11111111111111   1111111111111111111111111111111111111111111111111111"
 ];
 
 // Small, deliberately plain flat arena used only for boss testing/tuning -
@@ -222,32 +234,50 @@ const LEVELS = [
     ],
   },
   {
-    // First space level. No boss yet - the flat stretch right before the
-    // flag is the reserved boss room, deliberately left empty for now.
+    // First space level. The gravity-flip showcase section sits in the
+    // middle of the map (see the 'g'/'k' pads and 'c' ceiling tiles in
+    // level5Map); the reserved boss room right before the flag is still
+    // just flat, empty floor - no boss here yet.
     map: level5Map,
     theme: 'space',
     bossType: null,
     bossName: null,
     checkpointX: 6600,
+    // Space-native enemies only - no goombas/Hammer Bros/flying enemies
+    // carried over from the original 4 (grass/sky) levels. Ground melee
+    // roles use SpaceRobot, airborne roles (including small-range gap-
+    // crossing hovers) use UFO instead. Robots marked `flipped: true`
+    // patrol upside-down along the ceiling platforms in the gravity-flip
+    // section (cols 85-119), exactly like a normal robot patrols the floor.
     enemyPositions: [
       { x: 853, y: 440, range: 100, type: 'robot' },
-      { x: 986, y: 440, range: 100, type: 'hammerbro' },
+      { x: 986, y: 440, range: 100, type: 'robot' },
+      { x: 1520, y: 440, range: 100, type: 'robot' },
       { x: 1640, y: 440, range: 110, type: 'robot' },
-      { x: 2360, y: 440, range: 110 },
+      { x: 2240, y: 440, range: 100, type: 'robot' },
+      { x: 2360, y: 440, range: 110, type: 'robot' },
       { x: 3040, y: 440, range: 110, type: 'robot' },
-      { x: 3200, y: 440, range: 110, type: 'hammerbro' },
-      { x: 3760, y: 440, range: 110, type: 'robot' },
-      { x: 4413, y: 440, range: 110 },
+      { x: 3200, y: 440, range: 110, type: 'robot' },
+      // Ceiling patrol along the gravity-flip section's three walkable
+      // segments (seg1 cols 85-91, seg2 cols 96-102, seg3 cols 106-112).
+      { x: 3520, y: 40, range: 100, type: 'robot', flipped: true },
+      { x: 3960, y: 40, range: 100, type: 'robot', flipped: true },
+      { x: 4400, y: 40, range: 100, type: 'robot', flipped: true },
       { x: 4626, y: 440, range: 110, type: 'robot' },
-      { x: 5560, y: 440, range: 110, type: 'hammerbro' },
+      { x: 5560, y: 440, range: 110, type: 'robot' },
+      { x: 6080, y: 440, range: 100, type: 'robot' },
       { x: 6186, y: 440, range: 110, type: 'robot' },
-      { x: 6373, y: 440, range: 110 },
-      { x: 2680, y: 440, range: 24, type: 'flying' },
-      { x: 5060, y: 440, range: 24, type: 'flying-hammerbro' },
+      { x: 6373, y: 440, range: 110, type: 'robot' },
+      { x: 6400, y: 440, range: 100, type: 'robot' },
+      { x: 2680, y: 440, range: 24, type: 'ufo' },
+      { x: 5060, y: 440, range: 24, type: 'ufo' },
       { x: 1000, y: 250, range: 180, type: 'ufo' },
-      { x: 3400, y: 280, range: 200, type: 'ufo' },
-      { x: 2400, y: 300, range: 180, type: 'flying' },
+      { x: 1800, y: 280, range: 180, type: 'ufo' },
+      { x: 2400, y: 300, range: 180, type: 'ufo' },
       { x: 5600, y: 260, range: 180, type: 'ufo' },
+      // Hovers inside the gravity-flip pit itself, firing lasers across the
+      // gap so crossing the upside-down ceiling path isn't risk-free.
+      { x: 3800, y: 280, range: 160, type: 'ufo' },
     ],
   },
   {

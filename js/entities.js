@@ -19,6 +19,11 @@ class Player {
     this.invuln = 0;
     this.jumpsUsed = 0;
     this.sprinting = false;
+    // Space-level gravity-flip mechanic: false = normal (falls down),
+    // true = flipped (falls up, walks on ceiling platforms). Always starts
+    // normal on spawn/respawn, even mid-flip-section, so dying never leaves
+    // the player stuck upside down.
+    this.gravityFlipped = false;
     // gunAmmo is intentionally left untouched here: dying and respawning
     // (the only caller of reset() outside of a fresh game) should not take
     // away shots the player already earned.
@@ -41,7 +46,10 @@ class Player {
     if (Math.abs(this.vx) < 0.05) this.vx = 0;
 
     if (jumpPressed && this.jumpsUsed < 2) {
-      this.vy = this.jumpsUsed === 0 ? -13 : -11;
+      // Jump impulse points toward whichever side gravity currently pulls
+      // away from - "up" on screen normally, "down" on screen when flipped.
+      const jumpDir = this.gravityFlipped ? 1 : -1;
+      this.vy = jumpDir * (this.jumpsUsed === 0 ? 13 : 11);
       this.onGround = false;
       this.jumpsUsed++;
     }
@@ -55,8 +63,12 @@ class Player {
     }
     shootPressed = false;
 
-    this.vy += GRAVITY;
-    if (this.vy > 15) this.vy = 15;
+    this.vy += this.gravityFlipped ? -GRAVITY : GRAVITY;
+    if (this.gravityFlipped) {
+      if (this.vy < -15) this.vy = -15;
+    } else {
+      if (this.vy > 15) this.vy = 15;
+    }
 
     // Horizontal move + collision
     this.x += this.vx;
@@ -69,17 +81,22 @@ class Player {
       }
     }
 
-    // Vertical move + collision
+    // Vertical move + collision. Screen-space movement direction (this.vy's
+    // sign) is unchanged by the gravity flip - only which direction counts
+    // as "landing on the floor" vs. "bumping the ceiling" swaps, so the
+    // resolution below picks the branch based on gravityFlipped instead of
+    // always treating downward movement as landing.
     this.y += this.vy;
     this.onGround = false;
+    const landingSign = this.gravityFlipped ? -1 : 1;
     for (const t of solidTiles) {
       if (rectsOverlap(this, t)) {
-        if (this.vy > 0) {
-          this.y = t.y - this.h;
+        if (this.vy !== 0 && Math.sign(this.vy) === landingSign) {
+          this.y = landingSign > 0 ? t.y - this.h : t.y + t.h;
           this.onGround = true;
           this.jumpsUsed = 0;
-        } else if (this.vy < 0) {
-          this.y = t.y + t.h;
+        } else if (this.vy !== 0) {
+          this.y = landingSign > 0 ? t.y + t.h : t.y - this.h;
           if (t.itemBlock && !t.used) {
             t.used = true;
             powerups.push(new PowerupItem(t.x, t.y));
@@ -91,7 +108,9 @@ class Player {
 
     if (this.invuln > 0) this.invuln--;
 
-    if (this.y > canvas.height + 200) {
+    if (this.gravityFlipped) {
+      if (this.y < -200) this.die();
+    } else if (this.y > canvas.height + 200) {
       this.die();
     }
   }
@@ -112,14 +131,29 @@ class Player {
     if (this.dead) return;
     if (this.invuln > 0 && Math.floor(this.invuln / 4) % 2 === 0) return;
     const sx = this.x - camX;
-    // body
-    ctx.fillStyle = '#e52521';
-    ctx.fillRect(sx, this.y, this.w, this.h * 0.4);
-    ctx.fillStyle = '#0033cc';
-    ctx.fillRect(sx, this.y + this.h * 0.4, this.w, this.h * 0.6);
-    // face
-    ctx.fillStyle = '#ffcc99';
-    ctx.fillRect(sx + (this.facing > 0 ? 10 : 0), this.y + 6, 18, 12);
+    const spaceTheme = LEVELS[currentLevelIndex].theme === 'space';
+    // While gravity is flipped, mirror the whole sprite vertically around
+    // the player's own center so it visibly stands on its head, matching
+    // which way is "down" for it right now.
+    if (this.gravityFlipped) {
+      const cy = this.y + this.h / 2;
+      ctx.save();
+      ctx.translate(0, cy);
+      ctx.scale(1, -1);
+      ctx.translate(0, -cy);
+    }
+    if (spaceTheme) {
+      this.drawSpaceSuit(sx);
+    } else {
+      // body
+      ctx.fillStyle = '#e52521';
+      ctx.fillRect(sx, this.y, this.w, this.h * 0.4);
+      ctx.fillStyle = '#0033cc';
+      ctx.fillRect(sx, this.y + this.h * 0.4, this.w, this.h * 0.6);
+      // face
+      ctx.fillStyle = '#ffcc99';
+      ctx.fillRect(sx + (this.facing > 0 ? 10 : 0), this.y + 6, 18, 12);
+    }
     // laser gun held in hands while ammo remains
     if (this.gunAmmo > 0) {
       const gunY = this.y + this.h * 0.55;
@@ -132,6 +166,31 @@ class Player {
       ctx.fillStyle = '#ff3366';
       ctx.fillRect(sx + (this.facing > 0 ? this.w + 8 : -12), gunY + 1, 4, 4);
     }
+    if (this.gravityFlipped) ctx.restore();
+  }
+  // Space level skin: white/orange pressure suit with a round reflective
+  // helmet visor, replacing the classic red/blue overalls + skin-tone face
+  // used in the grass/sky levels.
+  drawSpaceSuit(sx) {
+    // suit body
+    ctx.fillStyle = '#e8e8ec';
+    ctx.fillRect(sx, this.y + this.h * 0.32, this.w, this.h * 0.68);
+    // orange chest/utility stripe
+    ctx.fillStyle = '#f2a71b';
+    ctx.fillRect(sx, this.y + this.h * 0.55, this.w, this.h * 0.14);
+    // helmet (round, with visor)
+    ctx.fillStyle = '#dcdfe4';
+    ctx.beginPath();
+    ctx.arc(sx + this.w / 2, this.y + this.h * 0.28, this.w * 0.52, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#8a8fa0';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    // visor (reflective cyan glass)
+    ctx.fillStyle = '#5fe6e6';
+    ctx.fillRect(sx + (this.facing > 0 ? 9 : this.w - 25), this.y + 6, 16, 12);
+    ctx.strokeStyle = '#146470';
+    ctx.strokeRect(sx + (this.facing > 0 ? 9 : this.w - 25), this.y + 6, 16, 12);
   }
 }
 
@@ -146,18 +205,32 @@ class Enemy {
     this.vy = 0;
     this.range = range;
     this.alive = true;
+    // Ground enemies placed in a space level's gravity-flip section patrol
+    // upside down on the ceiling - set true for those (see initEnemies()).
+    this.gravityFlipped = false;
   }
   update() {
     if (!this.alive) return;
-    this.vy += GRAVITY;
-    if (this.vy > 15) this.vy = 15;
+    this.vy += this.gravityFlipped ? -GRAVITY : GRAVITY;
+    if (this.gravityFlipped) {
+      if (this.vy < -15) this.vy = -15;
+    } else {
+      if (this.vy > 15) this.vy = 15;
+    }
     this.x += this.vx;
     this.y += this.vy;
     this.onGround = false;
+    const landingSign = this.gravityFlipped ? -1 : 1;
     for (const t of solidTiles) {
       if (rectsOverlap(this, t)) {
-        if (this.vy > 0) { this.y = t.y - this.h; this.onGround = true; this.vy = 0; }
-        else if (this.vy < 0) { this.y = t.y + t.h; this.vy = 0; }
+        if (this.vy !== 0 && Math.sign(this.vy) === landingSign) {
+          this.y = landingSign > 0 ? t.y - this.h : t.y + t.h;
+          this.onGround = true;
+          this.vy = 0;
+        } else if (this.vy !== 0) {
+          this.y = landingSign > 0 ? t.y + t.h : t.y - this.h;
+          this.vy = 0;
+        }
       }
     }
     if (this.x < this.startX - this.range || this.x > this.startX + this.range) {
@@ -364,20 +437,62 @@ class SpaceRobot extends Enemy {
     this.h = 32;
     this.vx = 1.5;
     this.legPhase = Math.random() * Math.PI * 2;
+    // Periodically charges up (brief red glow telegraph) then fires a
+    // horizontal red laser beam toward wherever the player currently is.
+    this.fireEvery = 150;
+    this.fireTimer = Math.floor(Math.random() * this.fireEvery);
+    this.charging = false;
+    this.chargeTimer = 0;
+    this.chargeDuration = 16; // ~0.27s at 60fps - brief telegraph, not a long wind-up
+    this.fireDir = 1;
   }
   update() {
     super.update();
     this.legPhase += 0.25;
+    // Only telegraph/fire while the robot is actually on (or just about to
+    // enter) screen - otherwise robots far off across the level keep
+    // charging and firing lasers that pile up long before the player ever
+    // reaches them.
+    const onScreen = this.x - camX > -50 && this.x - camX < canvas.width + 50;
+    if (!onScreen) return;
+    if (this.charging) {
+      this.chargeTimer++;
+      if (this.chargeTimer >= this.chargeDuration) {
+        this.charging = false;
+        this.fireTimer = 0;
+        const muzzleY = this.y + this.h / 2 - 4;
+        const muzzleX = this.fireDir > 0 ? this.x + this.w : this.x - 16;
+        hammers.push(new RobotLaser(muzzleX, muzzleY, this.fireDir));
+      }
+    } else {
+      this.fireTimer++;
+      if (this.fireTimer >= this.fireEvery) {
+        this.charging = true;
+        this.chargeTimer = 0;
+        this.fireDir = player.x < this.x ? -1 : 1;
+      }
+    }
   }
   draw() {
     if (!this.alive) return;
     const sx = this.x - camX;
     if (sx < -50 || sx > canvas.width + 50) return;
-    drawSpaceRobotBody(sx, this.y, this.w, this.h, this.legPhase);
+    const chargeProgress = this.charging ? this.chargeTimer / this.chargeDuration : 0;
+    if (this.gravityFlipped) {
+      const cy = this.y + this.h / 2;
+      ctx.save();
+      ctx.translate(0, cy);
+      ctx.scale(1, -1);
+      ctx.translate(0, -cy);
+      drawSpaceRobotBody(sx, this.y, this.w, this.h, this.legPhase, chargeProgress);
+      ctx.restore();
+    } else {
+      drawSpaceRobotBody(sx, this.y, this.w, this.h, this.legPhase, chargeProgress);
+    }
   }
 }
 
-function drawSpaceRobotBody(sx, y, w, h, legPhase) {
+function drawSpaceRobotBody(sx, y, w, h, legPhase, chargeProgress = 0) {
   const legOffset = Math.sin(legPhase) * 3;
   ctx.fillStyle = '#5a5f68';
   ctx.fillRect(sx + 4, y + h - 6, 6, 6 + legOffset);
@@ -386,6 +501,15 @@ function drawSpaceRobotBody(sx, y, w, h, legPhase) {
   ctx.fillRect(sx + 2, y + 6, w - 4, h - 14);
   ctx.strokeStyle = '#4a4f58';
   ctx.strokeRect(sx + 2, y + 6, w - 4, h - 14);
+  if (chargeProgress > 0) {
+    // Brief charge-up glow before firing: a growing, brightening red halo
+    // around the eye so the shot is telegraphed but doesn't feel sluggish.
+    const r = 4 + chargeProgress * 7;
+    ctx.fillStyle = `rgba(255,50,50,${0.25 + chargeProgress * 0.55})`;
+    ctx.beginPath();
+    ctx.arc(sx + w / 2, y + h / 2 - 2, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
   ctx.fillStyle = '#ff3b3b';
   ctx.beginPath();
   ctx.arc(sx + w / 2, y + h / 2 - 2, 5, 0, Math.PI * 2);
@@ -401,10 +525,41 @@ function drawSpaceRobotBody(sx, y, w, h, legPhase) {
   ctx.fill();
 }
 
+// SpaceRobot's projectile: a horizontal red laser beam fired toward the
+// player after the brief charge telegraph. Pushed into the shared
+// `hammers` array so it reuses the existing collision/cleanup logic.
+class RobotLaser {
+  constructor(x, y, dir) {
+    this.x = x;
+    this.y = y;
+    this.w = 16;
+    this.h = 5;
+    this.vx = dir * 9;
+    this.vy = 0;
+    this.dead = false;
+  }
+  update() {
+    this.x += this.vx;
+    for (const t of solidTiles) {
+      if (rectsOverlap(this, t)) this.dead = true;
+    }
+    if (this.x < -200 || this.x > levelWidth + 200) this.dead = true;
+  }
+  draw() {
+    const sx = this.x - camX;
+    if (sx < -50 || sx > canvas.width + 50) return;
+    ctx.fillStyle = 'rgba(255,40,40,0.35)';
+    ctx.fillRect(sx - 4, this.y - 3, this.w + 8, this.h + 6);
+    ctx.fillStyle = '#ff2222';
+    ctx.fillRect(sx, this.y, this.w, this.h);
+  }
+}
+
 // UFO: space-themed flying enemy. Hovers and patrols like FlyingEnemy, but
-// also periodically fires a laser bolt straight down (pushed into the
-// shared `hammers` array so it reuses the existing hammer collision/cleanup
-// logic in game.js instead of needing a whole new projectile system).
+// also periodically fires a rapid 3-shot burst of laser bolts straight
+// down (pushed into the shared `hammers` array so it reuses the existing
+// hammer collision/cleanup logic in game.js instead of needing a whole new
+// projectile system).
 class UFO extends Enemy {
   constructor(x, y, range) {
     super(x, y, range);
@@ -416,6 +571,9 @@ class UFO extends Enemy {
     this.wingPhase = Math.random() * Math.PI * 2;
     this.fireEvery = 100;
     this.fireTimer = Math.floor(Math.random() * this.fireEvery);
+    this.burstShotsLeft = 0;
+    this.burstInterval = 8; // frames between shots within a burst - rapid fire
+    this.burstTimer = 0;
   }
   update() {
     if (!this.alive) return;
@@ -425,10 +583,23 @@ class UFO extends Enemy {
     if (this.x < this.startX - this.range || this.x > this.startX + this.range) {
       this.vx *= -1;
     }
-    this.fireTimer++;
-    if (this.fireTimer >= this.fireEvery) {
-      this.fireTimer = 0;
-      hammers.push(new LaserBolt(this.x + this.w / 2 - 3, this.y + this.h));
+    if (this.burstShotsLeft > 0) {
+      this.burstTimer++;
+      if (this.burstTimer >= this.burstInterval) {
+        this.burstTimer = 0;
+        hammers.push(new LaserBolt(this.x + this.w / 2 - 3, this.y + this.h));
+        this.burstShotsLeft--;
+      }
+    } else {
+      this.fireTimer++;
+      if (this.fireTimer >= this.fireEvery) {
+        this.fireTimer = 0;
+        // Fire the first bolt of the burst immediately, then two more in
+        // quick succession via burstShotsLeft/burstTimer above.
+        hammers.push(new LaserBolt(this.x + this.w / 2 - 3, this.y + this.h));
+        this.burstShotsLeft = 2;
+        this.burstTimer = 0;
+      }
     }
   }
   draw() {

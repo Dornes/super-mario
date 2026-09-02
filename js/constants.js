@@ -7,6 +7,7 @@ const overlay = document.getElementById('overlay');
 const livesEl = document.getElementById('lives');
 const scoreEl = document.getElementById('score');
 const coinsEl = document.getElementById('coins');
+const coinIconEl = document.getElementById('coinIcon');
 
 const GRAVITY = 0.6;
 const FRICTION = 0.8;
