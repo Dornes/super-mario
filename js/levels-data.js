@@ -78,6 +78,32 @@ const level4Map = [
 "1111111111111111   1111111111111    11111111111111   111111111111       111111111111111     1111111111111    1111111111111111          11111111111111   111111111111111111"
 ];
 
+// Level 5: first of the space-themed levels (still a 2D platformer, just a
+// new backdrop/tileset - see the 'space' theme branch in drawBackground/
+// drawTiles in game.js). Reuses the same proven gap widths as level 3/4
+// (3/4/5-tile plain gaps, plus two wider 7/10-tile "stomp-chain" gaps that
+// need a hovering enemy bounce to cross) so every jump stays within the
+// player's validated physics. Introduces two new enemy types: the ground-
+// patrolling Space Robot ('robot') and the hovering, laser-firing UFO
+// ('ufo') - see entities.js. No boss yet: the flat stretch right before the
+// flag is the reserved boss room, deliberately left empty (see
+// initEnemies() in game.js - bossType: null means no boss spawns there).
+const level5Map = [
+"                                                                                                                                                                                                         ",
+"                                                                                                                                                                                                         ",
+"                                                                                                                                                                                                         ",
+"                    2 2 2                                                                                                                                                                                ",
+"                                        11                                                  2 2 2                                                     11                                                 ",
+"                                                                                                                                                                                                         ",
+"                                                       2 2 2                                                                          2 2 2                                                3             ",
+"                                                                            q                                                                                                                            ",
+"                                                                                                                                                           2 2 2                                         ",
+"                                                                                                            11                                                                                           ",
+"                                                                                                                                                                                                         ",
+"                                                                                                                                                                                                         ",
+"11111111111111   111111111111    1111111111111111     1111111111       11111111111111   111111111111    111111111111111111          11111111111111   1111111111111111111111111111111111111111111111111111"
+];
+
 // Small, deliberately plain flat arena used only for boss testing/tuning -
 // not a real level, so it's never reached by finishing another level (see
 // REAL_LEVEL_COUNT below). Rendered with a neutral gray "test chamber"
@@ -193,6 +219,35 @@ const LEVELS = [
       { x: 1760, y: 260, range: 180, type: 'flying' },
       { x: 4640, y: 280, range: 200, type: 'flying-hammerbro' },
       { x: 6240, y: 260, range: 180, type: 'flying' },
+    ],
+  },
+  {
+    // First space level. No boss yet - the flat stretch right before the
+    // flag is the reserved boss room, deliberately left empty for now.
+    map: level5Map,
+    theme: 'space',
+    bossType: null,
+    bossName: null,
+    checkpointX: 6600,
+    enemyPositions: [
+      { x: 853, y: 440, range: 100, type: 'robot' },
+      { x: 986, y: 440, range: 100, type: 'hammerbro' },
+      { x: 1640, y: 440, range: 110, type: 'robot' },
+      { x: 2360, y: 440, range: 110 },
+      { x: 3040, y: 440, range: 110, type: 'robot' },
+      { x: 3200, y: 440, range: 110, type: 'hammerbro' },
+      { x: 3760, y: 440, range: 110, type: 'robot' },
+      { x: 4413, y: 440, range: 110 },
+      { x: 4626, y: 440, range: 110, type: 'robot' },
+      { x: 5560, y: 440, range: 110, type: 'hammerbro' },
+      { x: 6186, y: 440, range: 110, type: 'robot' },
+      { x: 6373, y: 440, range: 110 },
+      { x: 2680, y: 440, range: 24, type: 'flying' },
+      { x: 5060, y: 440, range: 24, type: 'flying-hammerbro' },
+      { x: 1000, y: 250, range: 180, type: 'ufo' },
+      { x: 3400, y: 280, range: 200, type: 'ufo' },
+      { x: 2400, y: 300, range: 180, type: 'flying' },
+      { x: 5600, y: 260, range: 180, type: 'ufo' },
     ],
   },
   {

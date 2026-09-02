@@ -353,6 +353,136 @@ class FlyingHammerBro extends HammerBro {
   }
 }
 
+// Space Robot: ground-patrol enemy introduced in the space levels. Behaves
+// exactly like the base Enemy (patrol + gravity/fall), just with a distinct
+// metallic sprite (glowing eye, antenna, stepping legs) instead of the
+// goomba body.
+class SpaceRobot extends Enemy {
+  constructor(x, y, range) {
+    super(x, y, range);
+    this.w = 32;
+    this.h = 32;
+    this.vx = 1.5;
+    this.legPhase = Math.random() * Math.PI * 2;
+  }
+  update() {
+    super.update();
+    this.legPhase += 0.25;
+  }
+  draw() {
+    if (!this.alive) return;
+    const sx = this.x - camX;
+    if (sx < -50 || sx > canvas.width + 50) return;
+    drawSpaceRobotBody(sx, this.y, this.w, this.h, this.legPhase);
+  }
+}
+
+function drawSpaceRobotBody(sx, y, w, h, legPhase) {
+  const legOffset = Math.sin(legPhase) * 3;
+  ctx.fillStyle = '#5a5f68';
+  ctx.fillRect(sx + 4, y + h - 6, 6, 6 + legOffset);
+  ctx.fillRect(sx + w - 10, y + h - 6, 6, 6 - legOffset);
+  ctx.fillStyle = '#9aa0ab';
+  ctx.fillRect(sx + 2, y + 6, w - 4, h - 14);
+  ctx.strokeStyle = '#4a4f58';
+  ctx.strokeRect(sx + 2, y + 6, w - 4, h - 14);
+  ctx.fillStyle = '#ff3b3b';
+  ctx.beginPath();
+  ctx.arc(sx + w / 2, y + h / 2 - 2, 5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#5a5f68';
+  ctx.beginPath();
+  ctx.moveTo(sx + w / 2, y + 6);
+  ctx.lineTo(sx + w / 2, y - 4);
+  ctx.stroke();
+  ctx.fillStyle = '#ff5555';
+  ctx.beginPath();
+  ctx.arc(sx + w / 2, y - 5, 3, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+// UFO: space-themed flying enemy. Hovers and patrols like FlyingEnemy, but
+// also periodically fires a laser bolt straight down (pushed into the
+// shared `hammers` array so it reuses the existing hammer collision/cleanup
+// logic in game.js instead of needing a whole new projectile system).
+class UFO extends Enemy {
+  constructor(x, y, range) {
+    super(x, y, range);
+    this.w = 40;
+    this.h = 22;
+    this.baseY = y;
+    this.vx = 1.3;
+    this.flying = true;
+    this.wingPhase = Math.random() * Math.PI * 2;
+    this.fireEvery = 100;
+    this.fireTimer = Math.floor(Math.random() * this.fireEvery);
+  }
+  update() {
+    if (!this.alive) return;
+    this.x += this.vx;
+    this.wingPhase += 0.15;
+    this.y = this.baseY + Math.sin(this.wingPhase * 0.5) * 8;
+    if (this.x < this.startX - this.range || this.x > this.startX + this.range) {
+      this.vx *= -1;
+    }
+    this.fireTimer++;
+    if (this.fireTimer >= this.fireEvery) {
+      this.fireTimer = 0;
+      hammers.push(new LaserBolt(this.x + this.w / 2 - 3, this.y + this.h));
+    }
+  }
+  draw() {
+    if (!this.alive) return;
+    const sx = this.x - camX;
+    if (sx < -50 || sx > canvas.width + 50) return;
+    ctx.fillStyle = '#6fd6ff';
+    ctx.beginPath();
+    ctx.ellipse(sx + this.w / 2, this.y + 6, 10, 8, 0, Math.PI, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#8a8fa0';
+    ctx.beginPath();
+    ctx.ellipse(sx + this.w / 2, this.y + this.h - 6, this.w / 2, 8, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#4a4f5a';
+    ctx.stroke();
+    const blink = Math.sin(this.wingPhase * 2) > 0 ? '#ff5555' : '#ffe135';
+    ctx.fillStyle = blink;
+    ctx.fillRect(sx + 6, this.y + this.h - 8, 4, 4);
+    ctx.fillRect(sx + this.w - 10, this.y + this.h - 8, 4, 4);
+  }
+}
+
+// UFO's projectile: a thin laser bolt that falls straight down with no
+// gravity or rotation - visually and mechanically distinct from the
+// HammerBro's tumbling hammer, but pushed into the same `hammers` array so
+// the existing player-collision and off-screen cleanup code just works.
+class LaserBolt {
+  constructor(x, y) {
+    this.x = x;
+    this.y = y;
+    this.w = 6;
+    this.h = 16;
+    this.vx = 0;
+    this.vy = 6;
+    this.dead = false;
+  }
+  update() {
+    this.y += this.vy;
+    for (const t of solidTiles) {
+      if (rectsOverlap(this, t)) this.dead = true;
+    }
+    if (this.y > canvas.height + 100) this.dead = true;
+  }
+  draw() {
+    const sx = this.x - camX;
+    if (sx < -50 || sx > canvas.width + 50) return;
+    ctx.fillStyle = 'rgba(124,252,0,0.4)';
+    ctx.fillRect(sx - 2, this.y - 6, this.w + 4, 6);
+    ctx.fillStyle = '#7CFC00';
+    ctx.fillRect(sx, this.y, this.w, this.h);
+  }
+}
+
 class Fireball {
   constructor(x, y, dir) {
     this.x = x;
