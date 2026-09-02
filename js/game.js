@@ -244,6 +244,8 @@ function spawnCrumble(entity, colors) {
 
 function crumbleColors(entity) {
   if (entity instanceof HammerBro) return ['#2e8b2e', '#8a5a2b', 'white'];
+  if (entity instanceof SpaceRobot) return ['#9aa0ab', '#5a5f68', '#ff3b3b'];
+  if (entity instanceof UFO) return ['#8a8fa0', '#6fd6ff', '#4a4f5a'];
   if (entity instanceof Enemy) return ['#7b4a12', 'white', 'black'];
   if (entity instanceof Bowser) return ['#3a8f3a', '#c46f2a', 'white'];
   if (entity instanceof KingBoo) return ['#f5f5f5', '#dedede', 'black'];
@@ -273,6 +275,8 @@ function initEnemies() {
     if (p.type === 'hammerbro') return new HammerBro(p.x, p.y, p.range);
     if (p.type === 'flying') return new FlyingEnemy(p.x, p.y, p.range);
     if (p.type === 'flying-hammerbro') return new FlyingHammerBro(p.x, p.y, p.range);
+    if (p.type === 'robot') return new SpaceRobot(p.x, p.y, p.range);
+    if (p.type === 'ufo') return new UFO(p.x, p.y, p.range);
     return new Enemy(p.x, p.y, p.range);
   });
   fireballs = [];
@@ -476,7 +480,34 @@ function drawCloud(cx, cy, scale, variant) {
 
 function drawBackground() {
   const testTheme = LEVELS[currentLevelIndex].theme === 'test';
-  if (testTheme) {
+  const spaceTheme = LEVELS[currentLevelIndex].theme === 'space';
+  if (spaceTheme) {
+    // Deep-space backdrop: near-black gradient sky with a scrolling
+    // twinkling starfield and a couple of distant parallax planets.
+    const skyGrad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+    skyGrad.addColorStop(0, '#050015');
+    skyGrad.addColorStop(1, '#140030');
+    ctx.fillStyle = skyGrad;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    for (let i = 0; i < 90; i++) {
+      const sx = (i * 137 - camX * 0.15) % (canvas.width + 200);
+      const wx = sx < 0 ? sx + canvas.width + 200 : sx;
+      const sy = (i * 71) % canvas.height;
+      const twinkle = 0.5 + 0.5 * Math.sin(i * 13 + Date.now() / 400);
+      ctx.fillStyle = 'rgba(255,255,255,' + (0.3 + 0.5 * twinkle) + ')';
+      const r = 1 + (i % 3);
+      ctx.fillRect(wx, sy, r, r);
+    }
+    const planetColors = ['#c46f2a', '#4fc4c4', '#c44f8a'];
+    for (let i = 0; i < 3; i++) {
+      const px = (i * 500 + 200 - camX * 0.05) % (levelWidth + 500);
+      const wx = px < 0 ? px + levelWidth + 500 : px;
+      ctx.fillStyle = planetColors[i % planetColors.length];
+      ctx.beginPath();
+      ctx.arc(wx, 80 + (i % 2) * 60, 26 - i * 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  } else if (testTheme) {
     // Neutral gray "test chamber" backdrop - deliberately not the game's
     // normal sky/grass look, so this reads as an out-of-theme testing area.
     ctx.fillStyle = '#3a3f44';
@@ -515,6 +546,9 @@ function drawBackground() {
   if (testTheme) {
     grad.addColorStop(0, '#1c1f22');
     grad.addColorStop(1, '#050607');
+  } else if (spaceTheme) {
+    grad.addColorStop(0, '#0a0018');
+    grad.addColorStop(1, '#000000');
   } else {
     grad.addColorStop(0, '#241505');
     grad.addColorStop(1, '#050208');
@@ -534,6 +568,7 @@ function drawTiles() {
   }
   const groundSet = drawTiles._set;
   const testTheme = LEVELS[currentLevelIndex].theme === 'test';
+  const spaceTheme = LEVELS[currentLevelIndex].theme === 'space';
   for (const t of solidTiles) {
     const sx = t.x - camX;
     if (sx < -TILE || sx > canvas.width) continue;
@@ -579,6 +614,22 @@ function drawTiles() {
       if (!hasAbove) {
         ctx.fillStyle = '#787f86';
         ctx.fillRect(sx, t.y, t.w, 6);
+      }
+    } else if (spaceTheme) {
+      // Metallic space-station platform: dark plating with a glowing cyan
+      // top edge on exposed surfaces, instead of the grass/dirt look.
+      ctx.fillStyle = '#3a3f52';
+      ctx.fillRect(sx, t.y, t.w, t.h);
+      ctx.strokeStyle = '#1e2130';
+      ctx.strokeRect(sx, t.y, t.w, t.h);
+      ctx.fillStyle = 'rgba(255,255,255,0.06)';
+      ctx.fillRect(sx + 4, t.y + 4, t.w - 8, 3);
+      const hasAbove = groundSet.has(t.x + ',' + (t.y - TILE));
+      if (!hasAbove) {
+        ctx.fillStyle = '#5fe6e6';
+        ctx.fillRect(sx, t.y, t.w, 5);
+        ctx.fillStyle = 'rgba(95,230,230,0.35)';
+        ctx.fillRect(sx, t.y + 5, t.w, 4);
       }
     } else {
       ctx.fillStyle = '#c2701d';
