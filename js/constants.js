@@ -40,7 +40,8 @@ window.addEventListener('keydown', e => {
   if (e.code === 'Digit2') { if (e.shiftKey) teleportToBoss(1); else teleportToLevelStart(1); }
   if (e.code === 'Digit3') { if (e.shiftKey) teleportToBoss(2); else teleportToLevelStart(2); }
   if (e.code === 'Digit4') { if (e.shiftKey) teleportToBoss(3); else teleportToLevelStart(3); }
-  if (e.code === 'Digit0') teleportToBoss(4);
+  if (e.code === 'Digit5') { if (e.shiftKey) teleportToBoss(4); else teleportToLevelStart(4); }
+  if (e.code === 'Digit0') teleportToBoss(5);
   // secret cheat: Shift+G equips a fresh laser gun with 5 shots
   if (e.shiftKey && e.code === 'KeyG' && !won && lives > 0) {
     player.gunAmmo = 5;
