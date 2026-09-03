@@ -656,16 +656,19 @@ class LaserBolt {
 }
 
 class Fireball {
-  constructor(x, y, dir) {
+  constructor(x, y, vx, vy) {
     this.x = x;
     this.y = y;
     this.w = 14;
     this.h = 14;
-    this.vx = dir * 7;
-    this.vy = -6;
+    this.vx = vx;
+    this.vy = vy;
     this.dead = false;
+    this.trail = [];
   }
   update() {
+    this.trail.push({ x: this.x, y: this.y });
+    if (this.trail.length > 8) this.trail.shift();
     this.vy += GRAVITY * 0.5;
     this.x += this.vx;
     this.y += this.vy;
@@ -680,12 +683,82 @@ class Fireball {
   }
   draw() {
     const sx = this.x - camX;
+    // fading fire trail behind the ball
+    for (let i = 0; i < this.trail.length; i++) {
+      const p = this.trail[i];
+      const frac = (i + 1) / this.trail.length;
+      const tx = p.x - camX + this.w / 2;
+      const ty = p.y + this.h / 2;
+      ctx.fillStyle = 'rgba(255,' + Math.floor(90 + frac * 90) + ',0,' + (frac * 0.55) + ')';
+      ctx.beginPath();
+      ctx.arc(tx, ty, (this.w / 2) * frac, 0, Math.PI * 2);
+      ctx.fill();
+    }
     ctx.fillStyle = '#ff6600';
     ctx.beginPath();
     ctx.arc(sx + this.w / 2, this.y + this.h / 2, this.w / 2, 0, Math.PI * 2);
     ctx.fill();
     ctx.strokeStyle = '#cc3300';
     ctx.stroke();
+  }
+}
+
+// FireWave: a ground-hugging shockwave of flame, sent out in both directions
+// when Bowser slams down from his lunge attack. Pushed into the shared
+// `fireballs` array so it uses the existing generic projectile collision.
+class FireWave {
+  constructor(x, y, dir) {
+    this.x = x;
+    this.y = y;
+    this.w = 34;
+    this.h = 24;
+    this.dir = dir;
+    this.vx = dir * 6.5;
+    this.vy = 0;
+    this.t = 0;
+    this.life = 65;
+    this.dead = false;
+  }
+  update() {
+    this.x += this.vx;
+    this.t += 0.5;
+    this.life--;
+    if (this.life <= 0 || this.x < camX - 250 || this.x > camX + canvas.width + 250) {
+      this.dead = true;
+    }
+  }
+  draw() {
+    const sx = this.x - camX;
+    if (sx < -80 || sx > canvas.width + 80) return;
+    const baseY = this.y + this.h;
+    const flicker = Math.sin(this.t * 1.4) * 4;
+    const grad = ctx.createLinearGradient(sx, this.y, sx, baseY);
+    grad.addColorStop(0, 'rgba(255,220,120,0.9)');
+    grad.addColorStop(0.5, 'rgba(255,120,20,0.85)');
+    grad.addColorStop(1, 'rgba(200,40,0,0.7)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.moveTo(sx, baseY);
+    const segments = 5;
+    for (let i = 0; i <= segments; i++) {
+      const p = i / segments;
+      const px = sx + this.w * p;
+      const wobble = Math.sin(this.t * 1.2 + i * 1.6) * 5;
+      ctx.lineTo(px, baseY - this.h * (0.4 + p * 0.6) - wobble - flicker);
+    }
+    ctx.lineTo(sx + this.w, baseY);
+    ctx.closePath();
+    ctx.fill();
+
+    // trailing embers low to the ground
+    for (let i = 0; i < 3; i++) {
+      const ex = sx + this.w * 0.5 - this.dir * (i * 10 + this.t * 2 % 20);
+      const ey = baseY - 4 + Math.sin(this.t + i) * 3;
+      ctx.fillStyle = 'rgba(255,160,60,0.6)';
+      ctx.beginPath();
+      ctx.arc(ex, ey, 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
 }
 
@@ -758,8 +831,8 @@ class Bowser {
     this.homeX = x;
     this.homeY = y;
     this.range = 90;
-    this.hp = 3;
-    this.maxHp = 3;
+    this.hp = 5;
+    this.maxHp = 5;
     this.alive = true;
     this.invuln = 0;
     this.fireTimer = 60;
@@ -769,6 +842,17 @@ class Bowser {
     this.breathing = 0;
     this.breathAnim = 0;
     this.breathHitbox = null;
+    this.walkAnim = 0;
+    this.lungeCooldown = 150;
+    this.lungeWarmup = 0;
+    this.lunging = false;
+    this.lungeAnim = 0;
+    this.patrolSpeed = 0.8;
+  }
+  spawnFireWaves() {
+    const baseY = this.y + this.h - 16;
+    fireballs.push(new FireWave(this.x + this.w / 2 - 17, baseY, -1));
+    fireballs.push(new FireWave(this.x + this.w / 2 - 17, baseY, 1));
   }
   update() {
     if (!this.alive) return;
@@ -776,29 +860,60 @@ class Bowser {
     if (this.vy > 15) this.vy = 15;
     this.x += this.vx;
     this.y += this.vy;
+    const preLandVy = this.vy;
     for (const t of solidTiles) {
       if (rectsOverlap(this, t)) {
         if (this.vy > 0) { this.y = t.y - this.h; this.vy = 0; }
         else if (this.vy < 0) { this.y = t.y + t.h; this.vy = 0; }
       }
     }
-    const locked = this.breathWarmup > 0 || this.breathing > 0;
-    if (!locked && (this.x < this.homeX - this.range || this.x > this.homeX + this.range)) {
-      this.vx *= -1;
+    if (this.lunging && preLandVy > 0 && this.vy === 0) {
+      // Landed out of the lunge - slam down, send fire waves both ways,
+      // and resume walking in whichever direction he's currently facing
+      this.lunging = false;
+      this.lungeCooldown = 200;
+      this.vx = this.facing * this.patrolSpeed;
+      this.spawnFireWaves();
     }
-    if (!locked) this.facing = this.vx < 0 ? -1 : 1;
+
+    const locked = this.breathWarmup > 0 || this.breathing > 0 || this.lungeWarmup > 0 || this.lunging;
+    if (!locked) {
+      // Force him back toward the patrol zone whenever he's outside it -
+      // using an explicit sign (rather than flipping vx) keeps this stable
+      // even when he's landed far outside the zone after a lunge, where a
+      // simple `vx *= -1` would flip-flop every frame and leave him stuck
+      // oscillating in place instead of actually walking home.
+      if (this.x < this.homeX - this.range) {
+        this.vx = Math.abs(this.patrolSpeed);
+      } else if (this.x > this.homeX + this.range) {
+        this.vx = -Math.abs(this.patrolSpeed);
+      }
+    }
+    if (!locked) {
+      this.facing = this.vx < 0 ? -1 : 1;
+      this.walkAnim += Math.abs(this.vx) * 0.15;
+    }
     if (this.invuln > 0) this.invuln--;
 
     this.fireTimer--;
     if (this.fireTimer <= 0 && !locked) {
-      this.fireTimer = 65;
-      fireballs.push(new Fireball(this.x + this.w / 2, this.y + this.h / 2, this.facing));
+      this.fireTimer = 70;
+      const mx = this.x + (this.facing > 0 ? this.w - 6 : 6);
+      const my = this.y + this.h * 0.3;
+      const dx = (player.x + player.w / 2) - mx;
+      const dy = (player.y + player.h / 2) - my;
+      const dist = Math.max(1, Math.hypot(dx, dy));
+      const speed = 8;
+      fireballs.push(new Fireball(mx, my, (dx / dist) * speed, (dy / dist) * speed));
     }
 
     // Short-range flame breath when Mario is close
     const dx = player.x - this.x;
     const dy = Math.abs(player.y - this.y);
     const closeRange = Math.abs(dx) < 160 && dy < 90;
+    // Longer-range lunge when Mario is further away, so he can't just be
+    // kited from a safe distance
+    const farRange = Math.abs(dx) > 90 && Math.abs(dx) < 320 && dy < 140;
 
     if (this.breathWarmup > 0) {
       // Telegraph: Bowser stops, faces Mario, and winds up before breathing fire
@@ -817,13 +932,34 @@ class Bowser {
       if (this.breathing <= 0) {
         this.breathHitbox = null;
         this.breathCooldown = 100;
+        this.vx = this.facing * this.patrolSpeed;
       }
+    } else if (this.lungeWarmup > 0) {
+      // Telegraph: Bowser crouches down, glowing, before leaping
+      this.lungeWarmup--;
+      this.lungeAnim++;
+      this.vx = 0;
+      if (this.lungeWarmup <= 0) {
+        const dir = player.x < this.x ? -1 : 1;
+        this.facing = dir;
+        this.vx = dir * 6.5;
+        this.vy = -16;
+        this.lunging = true;
+      }
+    } else if (this.lunging) {
+      // Airborne mid-lunge; landing (and the fire-wave burst) is handled above
+      this.facing = this.vx < 0 ? -1 : 1;
     } else {
       this.breathCooldown--;
+      this.lungeCooldown--;
       if (this.breathCooldown <= 0 && closeRange) {
         this.facing = dx < 0 ? -1 : 1;
         this.breathWarmup = 24;
         this.breathAnim = 0;
+        this.vx = 0;
+      } else if (this.lungeCooldown <= 0 && farRange) {
+        this.lungeWarmup = 26;
+        this.lungeAnim = 0;
         this.vx = 0;
       }
     }
@@ -854,10 +990,19 @@ class Bowser {
     ctx.fillRect(sx + 17, this.y + 13, 4, 4);
     ctx.fillRect(sx + this.w - 21, this.y + 13, 4, 4);
 
+    // Lunge telegraph: a crouching orange glow underfoot before he leaps
+    if (this.lungeWarmup > 0) {
+      const pulse = 4 + Math.sin(this.lungeAnim * 0.8) * 3 + (26 - this.lungeWarmup) * 0.5;
+      ctx.fillStyle = 'rgba(255,150,30,' + (0.3 + Math.min(0.5, (26 - this.lungeWarmup) * 0.02)) + ')';
+      ctx.beginPath();
+      ctx.ellipse(sx + this.w / 2, this.y + this.h, this.w * 0.5 + pulse, 10, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
     // Wind-up telegraph: glowing mouth before he breathes fire
     if (this.breathWarmup > 0) {
       const mouthX = sx + (this.facing > 0 ? this.w - 6 : 6);
-      const mouthY = this.y + this.h * 0.5;
+      const mouthY = this.y + this.h * 0.3;
       const pulse = 6 + Math.sin(this.breathAnim * 0.6) * 3 + (24 - this.breathWarmup) * 0.3;
       const glow = ctx.createRadialGradient(mouthX, mouthY, 0, mouthX, mouthY, pulse * 2.2);
       glow.addColorStop(0, 'rgba(255,255,180,0.95)');
@@ -1635,7 +1780,7 @@ class HammerSquadBoss {
       throwTimer: Math.floor(Math.random() * 60), // randomized initial stagger
     }));
     this.windTimer = 160 + Math.floor(Math.random() * 60);
-    this.windEvery = 230;
+    this.windEvery = 1100;
     this.windTelegraph = 0; // >0 while the propeller winds up its wind burst
   }
   update() {
@@ -1661,7 +1806,7 @@ class HammerSquadBoss {
         const cx = this.x + this.w / 2, cy = this.y + this.h - 4;
         const tx = player.x + player.w / 2, ty = player.y + player.h / 2;
         const ang = Math.atan2(ty - cy, tx - cx);
-        const speed = 10.5;
+        const speed = 12.5;
         fireballs.push(new WindGust(cx, cy, Math.cos(ang) * speed, Math.sin(ang) * speed));
       }
       return;

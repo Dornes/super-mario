@@ -1032,9 +1032,10 @@ function checkBoss() {
     player.invuln = 90;
     player.vx = player.x < boss.x ? -7 : 7;
     player.vy = -6;
-    lives--;
+    // Getting caught in Bowser's full fire breath is instantly fatal
+    lives = 0;
     updateHud();
-    if (lives <= 0) killPlayerGameOver();
+    killPlayerGameOver();
   }
 }
 
