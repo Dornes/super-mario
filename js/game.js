@@ -45,6 +45,10 @@ function buildLevel() {
         solidTiles.push({x, y, w: TILE, h: TILE, pipe: false, itemBlock: true, used: false});
       } else if (ch === '2') {
         coinTiles.push({x: x + 8, y: y + 8, w: 24, h: 24, taken: false});
+      } else if (ch === '5') {
+        // Star placed directly in the ASCII map (in addition to the ones
+        // programmatically added in buildPipesAndVault for hidden vaults).
+        stars.push({x: x + 6, y: y + 6, w: 28, h: 28, taken: false});
       } else if (ch === '3') {
         flagCol = col;
       } else if (ch === 'g' || ch === 'k') {
@@ -895,18 +899,29 @@ function checkEnemies() {
   for (const e of enemies) {
     if (!e.alive) continue;
     if (rectsOverlap(player, e)) {
-      const falling = player.vy > 0 && (player.y + player.h) - e.y < 20;
+      // Stomping direction/proximity mirrors the enemy's own orientation:
+      // a normal floor enemy is only exposed on top (player must be
+      // falling downward and land near its top), while a ceiling-walking
+      // enemy in a space level's gravity-flip section is only exposed on
+      // its underside (player must be "falling" upward toward the
+      // ceiling and land near its bottom).
+      const falling = e.gravityFlipped
+        ? player.vy < 0 && (e.y + e.h) - player.y < 20
+        : player.vy > 0 && (player.y + player.h) - e.y < 20;
       if (falling) {
         e.alive = false;
         spawnCrumble(e, crumbleColors(e));
-        player.vy = -9;
+        player.vy = e.gravityFlipped ? 9 : -9;
         player.jumpsUsed = 0;
         score += 200;
         updateHud();
       } else if (player.invuln === 0) {
         player.invuln = 90;
         player.vx = player.facing > 0 ? -6 : 6;
-        player.vy = -6;
+        // Knockback is away from the surface the player is currently
+        // standing on - upward normally, downward while gravity-flipped
+        // (walking upside down on a ceiling), matching the stomp bounce.
+        player.vy = player.gravityFlipped ? 6 : -6;
         lives--;
         updateHud();
         if (lives <= 0) killPlayerGameOver();

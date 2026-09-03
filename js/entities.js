@@ -449,6 +449,7 @@ class SpaceRobot extends Enemy {
   update() {
     super.update();
     this.legPhase += 0.25;
+    if (!this.alive) return;
     // Only telegraph/fire while the robot is actually on (or just about to
     // enter) screen - otherwise robots far off across the level keep
     // charging and firing lasers that pile up long before the player ever
@@ -1773,7 +1774,7 @@ class HammerSquadBoss {
 
     if (this.windTelegraph > 0) {
       ctx.font = 'bold 22px sans-serif';
-      ctx.fillText('💨', propCx - 12, this.y - 14);
+      ctx.fillText('💨', propCx - 12, propHubY + 26);
     }
 
     // HP bar

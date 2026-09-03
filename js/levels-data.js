@@ -1,22 +1,24 @@
 // ASCII level layouts and the LEVELS config array (per-level map,
 // boss, enemy placements, checkpoint data, etc.)
 // Level layout: 0 = empty, 1 = ground/brick, 2 = coin, 3 = flag(goal), 4 = pipe,
+// 5 = star (bonus points - place directly in the map; stars can also be
+// added programmatically for hidden vaults, see addStar() in game.js),
 // q = "?" item block, g = gravity-flip-on pad, k = gravity-flip-off pad
 // (space levels only - see the gravity-pad branch in buildLevel() in game.js)
 const level1Map = [
-"                                                                                                    ",
-"                                                                                                    ",
-"                                                                                                    ",
-"                          2 2 2                                       2                            ",
-"                        11111111                                                                    ",
-"                                                                2 2 2                               ",
-"                    2                          11                111                               ",
-"                 111111              2 2 2                                                          ",
-"                                  111111111   q                                                3    ",
-"                                                          1                                    3    ",
-"      2 2                          1                                       44                      ",
-"    111111        2 2 2       1                    2      11              44                       ",
-"111111111111  11111111111111111111111111  111111111  11111111111111111111  111111  11111111111111111"
+"                                                                                                            ",
+"                                                                                                            ",
+"                                                                                                            ",
+"                          2 2 2                                       2                                     ",
+"                        11111111                                                                            ",
+"                                                                2 2 2                                       ",
+"                    2                          11                111                                        ",
+"                 111111              2 2 2                                                                  ",
+"                                  111111111   q                                                          3  ",
+"                                                          1                                              3  ",
+"      2 2                          1                                       44                               ",
+"    111111        2 2 2       1                    2      11              44                                ",
+"111111111111  11111111111111111111111111  111111111  11111111111111111111  111111  1111111111111111111111111"
 ];
 
 const level2Map = [
@@ -28,8 +30,8 @@ const level2Map = [
 "                                            111111                         2 2 2                                                  ",
 "                  2 2                                                     111111                   2 2 2                          ",
 "                  1111                                    2 2                                     111111                          ",
-"         2 2                       22        q            1111                          2 2                                   3   ",
-"        1111                      1111                                                  1111                                  3   ",
+"         2 2                       22        q            1111                          2 2                                    3  ",
+"        1111                      1111                                                  1111                                   3  ",
 "                            44                                    44                                        44                    ",
 "                            44                                    44                                        44                    ",
 "111111111111111  11111111111111111111111  11111111  11111111111111111111111  1111111111111  1111111  11111111111111111111111111111"
@@ -102,10 +104,10 @@ const level4Map = [
 // still just flat, empty floor - no boss lives here yet.
 const level5Map = [
 "                                                                                     ccccccc    ccccccc   ccccccc    ccc                                                                                 ",
-"                                                                                                   2         2        k                                                                                  ",
+"                                         5                                                         2         2        k                                                                                  ",
 "                                                                                                                                                                                                         ",
 "                    2 2 2                                                                                                                                                                                ",
-"                                        11                                                  2 2 2                                                     11                                                 ",
+"                                        111                                                 2 2 2                                                     11                                                 ",
 "                                                                                                                                                                                                         ",
 "                                                       2 2 2                                                                          2 2 2                                                3             ",
 "                                                                            q                                                                                                                            ",
