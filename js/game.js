@@ -15,6 +15,10 @@ let pipeWarps = [];
 let warpCooldown = 0;
 let powerups = [];
 let gravityPads = [];
+let computerTile = null;
+let bossMenuOpen = false;
+let bossMenuIndex = 0;
+let bossMenuSelected = new Set();
 
 function buildLevel() {
   coinTiles = [];
@@ -25,6 +29,7 @@ function buildLevel() {
   warpCooldown = 0;
   powerups = [];
   gravityPads = [];
+  computerTile = null;
   const levelMap = LEVELS[currentLevelIndex].map;
   levelWidth = levelMap[0].length * TILE;
   let flagCol = null;
@@ -57,6 +62,10 @@ function buildLevel() {
         // player's current gravity state doesn't already match its target,
         // so standing on it afterward doesn't re-trigger every frame.
         gravityPads.push({x, y: y + 4, w: TILE, h: TILE - 8, target: ch === 'g'});
+      } else if (ch === 'm') {
+        // Old-school computer terminal (boss-testing arena only): walk up
+        // and press Enter to open the boss-select menu.
+        computerTile = {x, y: y + 4, w: TILE, h: TILE - 4};
       }
     }
   }
@@ -210,7 +219,7 @@ let sunroofDrops = [];
 const bossMusic = new Audio('sounds/lawyer-boss-theme.mp3');
 let bossMusicActive = false;
 bossMusic.addEventListener('ended', () => {
-  if (boss instanceof LawyerBoss && boss.alive) {
+  if (bosses.some(b => b instanceof LawyerBoss && b.alive)) {
     bossMusic.currentTime = 0;
     bossMusic.play().catch(() => {});
   }
@@ -235,9 +244,11 @@ function stopBossMusic() {
 // Kicks off the boss theme the first time Sy Loophole is actually visible
 // within the camera's view, rather than as soon as he's spawned off-screen.
 function updateBossMusicTrigger() {
-  if (bossMusicActive || !(boss instanceof LawyerBoss) || !boss.alive) return;
-  const sx = boss.x - camX;
-  if (sx + boss.w > 0 && sx < canvas.width) {
+  if (bossMusicActive) return;
+  const lawyer = bosses.find(b => b instanceof LawyerBoss && b.alive);
+  if (!lawyer) return;
+  const sx = lawyer.x - camX;
+  if (sx + lawyer.w > 0 && sx < canvas.width) {
     bossMusicActive = true;
     startBossMusic();
   }
@@ -288,12 +299,81 @@ function killPlayerGameOver() {
   spawnCrumble(player, crumbleColors(player));
   showOverlay('GAME OVER - trykk R for å starte på nytt');
 }
-let boss = null;
+let bosses = [];
 let checkpoint = null;
 let lives = 3;
 let score = 0;
 let coins = 0;
 let won = false;
+
+// Builds a boss instance of the given bossType, positioned relative to an
+// x anchor exactly like each boss was originally hand-placed just before a
+// level's flag (anchorX plays the role flagTile.x used to). Shared by the
+// normal per-level spawn in initEnemies() and the boss-testing computer's
+// select menu (see spawnSelectedBosses below), so picking a boss from the
+// menu lands it the same way it'd sit in a real level.
+function createBoss(bossType, anchorX, groundY) {
+  if (bossType === 'kingboo') return new KingBoo(anchorX - 200, groundY - 160);
+  if (bossType === 'kamek') return new Kamek(anchorX - 190, groundY - 170);
+  if (bossType === 'lawyer') return new LawyerBoss(anchorX - 160, groundY - 80);
+  if (bossType === 'hammersquad') return new HammerSquadBoss(anchorX - 220, groundY - 190);
+  return new Bowser(anchorX - 150, groundY - 80);
+}
+
+// x anchor bosses are placed relative to: a real level's flag if it has
+// one, otherwise the boss-testing arena's configured arena position.
+function bossAnchorX(level) {
+  if (flagTile) return flagTile.x;
+  if (level.bossArenaX != null) return level.bossArenaX;
+  return 400;
+}
+
+// True while the player is standing close enough to the boss-testing
+// computer terminal to interact with it.
+function nearComputer() {
+  if (!computerTile) return false;
+  const zone = { x: computerTile.x - 24, y: computerTile.y - 30, w: computerTile.w + 48, h: computerTile.h + 50 };
+  return rectsOverlap(player, zone);
+}
+
+function openBossMenu() {
+  bossMenuOpen = true;
+}
+
+function closeBossMenu() {
+  bossMenuOpen = false;
+  bossMenuSelected.clear();
+}
+
+// Spawns either every boss checked off in the menu (spread out left to
+// right so they don't stack on top of each other), or - if nothing is
+// checked - just whichever boss is currently highlighted. Replaces
+// whatever bosses are already out and clears their still-flying
+// projectiles/minions so switching mid-fight doesn't leave stray hazards
+// behind.
+function spawnSelectedBosses() {
+  const level = LEVELS[currentLevelIndex];
+  const groundY = (level.map.length - 1) * TILE;
+  const anchorX = bossAnchorX(level);
+  const spacing = level.bossArenaSpacing != null ? level.bossArenaSpacing : 260;
+  const indices = bossMenuSelected.size > 0
+    ? Array.from(bossMenuSelected).sort((a, b) => a - b)
+    : [bossMenuIndex];
+  fireballs = [];
+  hammers = [];
+  lawyerCars = [];
+  sunroofDrops = [];
+  bosses = indices.map((idx, i) => createBoss(BOSS_LIST[idx].type, anchorX + i * spacing, groundY));
+  if (bosses.some(b => b instanceof LawyerBoss)) {
+    bossMusicActive = false; // wait until he's actually on screen (see updateBossMusicTrigger)
+  } else {
+    stopBossMusic();
+  }
+  bossMenuSelected.clear();
+  bossMenuOpen = false;
+  const names = indices.map(idx => BOSS_LIST[idx].name).join(', ');
+  showOverlayBrief('🖥️ Spawner ' + names + '!');
+}
 
 function initEnemies() {
   const level = LEVELS[currentLevelIndex];
@@ -320,34 +400,23 @@ function initEnemies() {
   const groundY = (level.map.length - 1) * TILE;
   // Place the boss just before the flag. Levels with no bossType yet (e.g.
   // a level whose boss hasn't been designed) simply have no boss fight —
-  // reaching the flag clears the level immediately.
-  if (flagTile && level.bossType) {
-    if (level.bossType === 'kingboo') {
-      boss = new KingBoo(flagTile.x - 200, flagTile.y + flagTile.h - 160);
-    } else if (level.bossType === 'kamek') {
-      boss = new Kamek(flagTile.x - 190, groundY - 170);
-    } else if (level.bossType === 'lawyer') {
-      boss = new LawyerBoss(flagTile.x - 160, flagTile.y + flagTile.h - 80);
-    } else if (level.bossType === 'hammersquad') {
-      boss = new HammerSquadBoss(flagTile.x - 220, flagTile.y + flagTile.h - 190);
-    } else {
-      boss = new Bowser(flagTile.x - 150, flagTile.y + flagTile.h - 80);
-    }
-  } else {
-    boss = null;
-  }
-  if (boss instanceof LawyerBoss) {
+  // reaching the flag clears the level immediately. The boss-testing arena
+  // never sets bossType, so it always starts empty until the player picks
+  // one or more from the computer's menu.
+  bosses = (flagTile && level.bossType) ? [createBoss(level.bossType, flagTile.x, groundY)] : [];
+  if (bosses.some(b => b instanceof LawyerBoss)) {
     bossMusicActive = false; // wait until he's actually on screen to start the music
   } else {
     stopBossMusic();
   }
   // Checkpoint right before the boss — placed before any elevated platform
   // near the boss so it doesn't render underneath/inside one. Bossless
-  // levels use an explicit checkpointX from the level config instead.
+  // levels (and the boss-testing arena) use an explicit checkpointX from
+  // the level config instead.
   let checkpointX = null;
-  if (boss) {
-    checkpointX = computeCheckpointX(boss.homeX, groundY);
-  } else if (flagTile && level.checkpointX != null) {
+  if (bosses.length) {
+    checkpointX = computeCheckpointX(bosses[0].homeX, groundY);
+  } else if (level.checkpointX != null) {
     checkpointX = level.checkpointX;
   }
   checkpoint = checkpointX != null ? {
@@ -406,12 +475,27 @@ function showOverlayBrief(text) {
   setTimeout(() => { if (!won && lives > 0) overlay.style.display = 'none'; }, 900);
 }
 
+// Default level-start spawn point: level.spawnX/spawnY override the
+// generic (40, 300) fallback when a level needs a specific start position
+// (e.g. the boss-testing arena spawns right next to its computer terminal).
+function defaultSpawnForLevel(levelIdx) {
+  const lvl = LEVELS[levelIdx];
+  return { x: lvl.spawnX != null ? lvl.spawnX : 40, y: lvl.spawnY != null ? lvl.spawnY : 300 };
+}
+
 function restart() {
   // After fully winning the game, R starts a brand new game from level 1.
   // Otherwise (died / game over), respawn on the level the player was on,
   // keeping their checkpoint and progress.
   const fullReset = won;
   const hadCheckpoint = !fullReset && checkpoint && checkpoint.activated;
+  // In the boss-testing arena, dying and respawning shouldn't wipe out
+  // whatever boss(es) were already spawned from the computer's menu - that'd
+  // mean walking back to the PC and re-selecting them after every death.
+  // Keep the existing instances (with whatever hp/alive state they're in)
+  // instead of letting initEnemies() below reset them to none.
+  const isTestArena = !fullReset && LEVELS[currentLevelIndex] && LEVELS[currentLevelIndex].isTest;
+  const survivingBosses = isTestArena ? bosses : null;
   lives = 3;
   won = false;
   if (fullReset) {
@@ -422,11 +506,19 @@ function restart() {
   }
   buildLevel();
   initEnemies();
+  if (survivingBosses) {
+    bosses = survivingBosses;
+    if (bosses.some(b => b instanceof LawyerBoss && b.alive)) {
+      bossMusicActive = false; // wait until he's actually on screen again
+    } else {
+      stopBossMusic();
+    }
+  }
   if (hadCheckpoint && checkpoint) {
     checkpoint.activated = true;
     spawnPoint = { x: checkpoint.x, y: checkpoint.y };
   } else {
-    spawnPoint = { x: 40, y: 300 };
+    spawnPoint = defaultSpawnForLevel(currentLevelIndex);
   }
   player.reset();
   overlay.style.display = 'none';
@@ -435,7 +527,7 @@ function restart() {
 
 function nextLevel() {
   currentLevelIndex++;
-  spawnPoint = { x: 40, y: 300 };
+  spawnPoint = defaultSpawnForLevel(currentLevelIndex);
   buildLevel();
   initEnemies();
   player.reset();
@@ -451,16 +543,22 @@ function teleportToBoss(levelIdx) {
   if (lives <= 0) lives = 3;
   buildLevel();
   initEnemies();
-  if (checkpoint) {
+  if (LEVELS[levelIdx].isTest) {
+    // No fixed boss/checkpoint fight here anymore - drop the player right
+    // next to the computer terminal so they can pick a boss from the menu.
+    spawnPoint = defaultSpawnForLevel(levelIdx);
+  } else if (checkpoint) {
     spawnPoint = { x: checkpoint.x + 20, y: checkpoint.y };
   } else {
-    spawnPoint = { x: 40, y: 300 };
+    spawnPoint = defaultSpawnForLevel(levelIdx);
   }
   player.reset();
   camX = Math.max(0, Math.min(spawnPoint.x - canvas.width / 2, levelWidth - canvas.width));
   overlay.style.display = 'none';
   updateHud();
-  if (boss) {
+  if (LEVELS[levelIdx].isTest) {
+    showOverlayBrief('🖥️ Teleportert til boss-testarenaen!');
+  } else if (bosses.length) {
     showOverlayBrief('👑 Teleportert til sjefsfighten på bane ' + (levelIdx + 1) + '!');
   } else {
     showOverlayBrief('🚩 Teleportert til sjekkpunktet på bane ' + (levelIdx + 1) + '!');
@@ -474,7 +572,7 @@ function teleportToLevelStart(levelIdx) {
   if (lives <= 0) lives = 3;
   buildLevel();
   initEnemies();
-  spawnPoint = { x: 40, y: 300 };
+  spawnPoint = defaultSpawnForLevel(levelIdx);
   player.reset();
   camX = Math.max(0, Math.min(spawnPoint.x - canvas.width / 2, levelWidth - canvas.width));
   overlay.style.display = 'none';
@@ -819,6 +917,34 @@ function drawFlag() {
   ctx.fill();
 }
 
+// Old-school beige CRT terminal prop for the boss-testing arena. Shows a
+// glowing green "ENTER" prompt above it whenever the player is close enough
+// to interact, unless the boss-select menu is already open.
+function drawComputer() {
+  if (!computerTile) return;
+  const sx = computerTile.x - camX;
+  if (sx < -60 || sx > canvas.width + 60) return;
+  const t = computerTile;
+  // monitor body
+  ctx.fillStyle = '#d8d2c0';
+  ctx.fillRect(sx + 2, t.y + 6, t.w - 4, t.h - 6);
+  ctx.strokeStyle = '#8a8370';
+  ctx.strokeRect(sx + 2, t.y + 6, t.w - 4, t.h - 6);
+  // screen
+  const flicker = 0.75 + 0.25 * Math.sin(Date.now() / 250);
+  ctx.fillStyle = 'rgba(40, 220, 100, ' + flicker.toFixed(2) + ')';
+  ctx.fillRect(sx + 7, t.y + 11, t.w - 14, t.h * 0.55);
+  ctx.fillStyle = '#3a3427';
+  ctx.fillRect(sx + t.w / 2 - 5, t.y + t.h - 8, 10, 8); // stand
+  ctx.fillRect(sx + 2, t.y + t.h, t.w - 4, 5); // base
+  if (!bossMenuOpen && nearComputer()) {
+    ctx.fillStyle = '#39ff6a';
+    ctx.font = 'bold 12px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('ENTER', sx + t.w / 2, t.y - 8);
+  }
+}
+
 function drawCheckpoint() {
   if (!checkpoint) return;
   const sx = checkpoint.x - camX;
@@ -932,18 +1058,9 @@ function checkEnemies() {
 
 function checkWin() {
   if (won || !flagTile) return;
-  if (boss && boss.alive) return; // must defeat the boss first
+  if (bosses.some(b => b.alive)) return; // must defeat every boss first
   if (player.x + player.w > flagTile.x) {
     const level = LEVELS[currentLevelIndex];
-    if (level.isTest) {
-      // Boss-testing arena: never chains into another level or the
-      // "you won the game" screen, it just confirms the run.
-      won = true;
-      score += 1000;
-      updateHud();
-      showOverlay('🧪 Boss-test fullført! Poeng: ' + score + '  (trykk R for å restarte)');
-      return;
-    }
     if (currentLevelIndex < REAL_LEVEL_COUNT - 1) {
       nextLevel();
       return;
@@ -960,41 +1077,55 @@ function checkWin() {
   }
 }
 
-function checkBoss() {
-  if (!boss || !boss.alive) return;
-  // Once a HammerSquadBoss has broken apart it has no body left to
-  // collide with - its three dropped riders are plain enemies from here
-  // on, handled by checkEnemies()/checkPlayerShots() like any other foe.
-  const hittable = !boss.broken && (boss.visible === undefined || boss.visible);
-  if (!boss.broken && rectsOverlap(player, boss)) {
-    const falling = player.vy > 0 && (player.y + player.h) - boss.y < 24;
-    if (falling && boss.invuln === 0 && hittable) {
-      boss.hp--;
-      boss.invuln = 60;
-      player.vy = -10;
-      player.jumpsUsed = 0;
-      score += 300;
-      updateHud();
-      if (boss.hp <= 0) {
-        if (boss instanceof HammerSquadBoss) {
-          boss.breakApart();
-        } else {
-          boss.alive = false;
-          spawnCrumble(boss, crumbleColors(boss));
-        }
-        score += 2000;
+function checkBosses() {
+  for (const b of bosses) {
+    if (!b.alive) continue;
+    // Once a HammerSquadBoss has broken apart it has no body left to
+    // collide with - its three dropped riders are plain enemies from here
+    // on, handled by checkEnemies()/checkPlayerShots() like any other foe.
+    const hittable = !b.broken && (b.visible === undefined || b.visible);
+    if (!b.broken && rectsOverlap(player, b)) {
+      const falling = player.vy > 0 && (player.y + player.h) - b.y < 24;
+      if (falling && b.invuln === 0 && hittable) {
+        b.hp--;
+        b.invuln = 60;
+        player.vy = -10;
+        player.jumpsUsed = 0;
+        score += 300;
         updateHud();
-        if (boss instanceof LawyerBoss) stopBossMusic();
+        if (b.hp <= 0) {
+          if (b instanceof HammerSquadBoss) {
+            b.breakApart();
+          } else {
+            b.alive = false;
+            spawnCrumble(b, crumbleColors(b));
+          }
+          score += 2000;
+          updateHud();
+          if (b instanceof LawyerBoss) stopBossMusic();
+        }
+      } else if (player.invuln === 0 && hittable) {
+        player.invuln = 90;
+        player.vx = player.x < b.x ? -7 : 7;
+        player.vy = -6;
+        lives--;
+        updateHud();
+        if (lives <= 0) killPlayerGameOver();
       }
-    } else if (player.invuln === 0 && hittable) {
+    }
+    if (b.breathHitbox && player.invuln === 0 && rectsOverlap(player, b.breathHitbox)) {
       player.invuln = 90;
-      player.vx = player.x < boss.x ? -7 : 7;
+      player.vx = player.x < b.x ? -7 : 7;
       player.vy = -6;
-      lives--;
+      // Getting caught in Bowser's full fire breath is instantly fatal
+      lives = 0;
       updateHud();
-      if (lives <= 0) killPlayerGameOver();
+      killPlayerGameOver();
     }
   }
+  // Shared projectile/minion hazards below aren't tied to any one boss
+  // instance, so they're only checked once per frame regardless of how
+  // many bosses are currently out.
   for (const f of fireballs) {
     if (!f.dead && player.invuln === 0 && rectsOverlap(player, f)) {
       f.dead = true;
@@ -1028,15 +1159,6 @@ function checkBoss() {
       if (lives <= 0) killPlayerGameOver();
     }
   }
-  if (boss.breathHitbox && player.invuln === 0 && rectsOverlap(player, boss.breathHitbox)) {
-    player.invuln = 90;
-    player.vx = player.x < boss.x ? -7 : 7;
-    player.vy = -6;
-    // Getting caught in Bowser's full fire breath is instantly fatal
-    lives = 0;
-    updateHud();
-    killPlayerGameOver();
-  }
 }
 
 function checkPowerups() {
@@ -1064,20 +1186,22 @@ function checkPlayerShots() {
       }
     }
     if (s.dead) continue;
-    if (boss && boss.alive && !boss.broken) {
-      const hittable = boss.visible === undefined || boss.visible;
-      if (hittable && boss.invuln === 0 && rectsOverlap(s, boss)) {
-        boss.hp--;
+    for (const b of bosses) {
+      if (!b.alive || b.broken) continue;
+      const hittable = b.visible === undefined || b.visible;
+      if (hittable && b.invuln === 0 && rectsOverlap(s, b)) {
+        b.hp--;
         s.dead = true;
-        if (boss.hp <= 0) {
-          if (boss instanceof HammerSquadBoss) {
-            boss.breakApart();
+        if (b.hp <= 0) {
+          if (b instanceof HammerSquadBoss) {
+            b.breakApart();
           } else {
-            boss.alive = false;
-            spawnCrumble(boss, crumbleColors(boss));
+            b.alive = false;
+            spawnCrumble(b, crumbleColors(b));
           }
-          if (boss instanceof LawyerBoss) stopBossMusic();
+          if (b instanceof LawyerBoss) stopBossMusic();
         }
+        break;
       }
     }
     if (s.dead) continue;
@@ -1105,11 +1229,61 @@ function checkHammers() {
   }
 }
 
+// Draws the boss-testing computer's boss-select menu: a retro green-on-
+// black terminal box listing BOSS_LIST, highlighting the current cursor
+// row and checking off any rows added to the multi-select set.
+function drawBossMenu() {
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  const headerH = 44;
+  const rowH = 30;
+  const footerH = 58;
+  const boxW = 380;
+  const boxH = headerH + BOSS_LIST.length * rowH + footerH;
+  const boxX = canvas.width / 2 - boxW / 2;
+  const boxY = canvas.height / 2 - boxH / 2;
+  ctx.fillStyle = '#0a120a';
+  ctx.fillRect(boxX, boxY, boxW, boxH);
+  ctx.strokeStyle = '#39ff6a';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(boxX, boxY, boxW, boxH);
+  ctx.fillStyle = '#39ff6a';
+  ctx.font = 'bold 16px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('-- SELECT BOSS(ES) --', canvas.width / 2, boxY + 28);
+  ctx.font = '14px monospace';
+  BOSS_LIST.forEach((b, i) => {
+    const rowY = boxY + headerH + i * rowH;
+    const selected = bossMenuSelected.has(i);
+    if (i === bossMenuIndex) {
+      ctx.fillStyle = 'rgba(57, 255, 106, 0.25)';
+      ctx.fillRect(boxX + 8, rowY, boxW - 16, rowH - 6);
+    }
+    ctx.fillStyle = selected ? '#ffd93d' : (i === bossMenuIndex ? '#c8ffd8' : '#39ff6a');
+    ctx.textAlign = 'left';
+    const cursor = i === bossMenuIndex ? '> ' : '  ';
+    const checkbox = selected ? '[x] ' : '[ ] ';
+    ctx.fillText(cursor + checkbox + b.name, boxX + 16, rowY + rowH - 14);
+  });
+  ctx.strokeStyle = 'rgba(57, 255, 106, 0.4)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(boxX + 8, boxY + headerH + BOSS_LIST.length * rowH + 6);
+  ctx.lineTo(boxX + boxW - 8, boxY + headerH + BOSS_LIST.length * rowH + 6);
+  ctx.stroke();
+  ctx.fillStyle = '#8fd8a0';
+  ctx.font = '12px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('↑↓ Move   ←→ Unselect/Select', canvas.width / 2, boxY + boxH - 32);
+  const enterHint = bossMenuSelected.size > 0 ? 'ENTER Spawn selected   ESC Cancel' : 'ENTER Spawn highlighted   ESC Cancel';
+  ctx.fillText(enterHint, canvas.width / 2, boxY + boxH - 14);
+}
+
 function loop() {
-  if (!won && lives > 0) {
+  if (!won && lives > 0 && !bossMenuOpen) {
     player.update();
     for (const e of enemies) e.update();
-    if (boss) boss.update();
+    for (const b of bosses) b.update();
     for (const f of fireballs) f.update();
     fireballs = fireballs.filter(f => !f.dead);
     for (const c of lawyerCars) c.update();
@@ -1128,7 +1302,7 @@ function loop() {
     checkStars();
     checkPowerups();
     checkEnemies();
-    checkBoss();
+    checkBosses();
     checkPlayerShots();
     checkHammers();
     checkWin();
@@ -1155,9 +1329,10 @@ function loop() {
   drawStars();
   drawCheckpoint();
   drawFlag();
+  drawComputer();
   for (const p of powerups) p.draw();
   for (const e of enemies) e.draw();
-  if (boss) boss.draw();
+  for (const b of bosses) b.draw();
   for (const f of fireballs) f.draw();
   for (const c of lawyerCars) c.draw();
   for (const d of sunroofDrops) d.draw();
@@ -1175,6 +1350,7 @@ function loop() {
     ctx.restore();
   }
   player.draw();
+  if (bossMenuOpen) drawBossMenu();
 
   requestAnimationFrame(loop);
 }

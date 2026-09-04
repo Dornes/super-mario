@@ -122,21 +122,37 @@ const level5Map = [
 // not a real level, so it's never reached by finishing another level (see
 // REAL_LEVEL_COUNT below). Rendered with a neutral gray "test chamber"
 // palette instead of the normal grass/sky theme (see drawBackground/
-// drawTiles' testTheme branch in game.js).
+// drawTiles' testTheme branch in game.js). The 'm' is an old-school
+// computer terminal: walk up to it and press Enter to open a boss-select
+// menu (see drawComputer/drawBossMenu in game.js) instead of always
+// fighting a fixed boss. The arena has no end-level flag - it's a pure
+// sandbox. Kept compact (checkpoint/PC/boss arena all close together) so
+// re-testing a boss after dying doesn't mean a long run back.
 const bossTestMap = [
-"                                  ",
-"                                  ",
-"                                  ",
-"                                  ",
-"                                  ",
-"                                  ",
-"                              3   ",
-"                                  ",
-"                                  ",
-"                                  ",
-"                                  ",
-"                                  ",
-"1111111111111111111111111111111111",
+"                                                       ",
+"                                                       ",
+"                                                       ",
+"                                                       ",
+"                                                       ",
+"                                                       ",
+"                                                       ",
+"                                                       ",
+"                                                       ",
+"                                                       ",
+"                                                       ",
+"    m                                                  ",
+"1111111111111111111111111111111111111111111111111111111",
+];
+
+// Roster shown in the boss-testing computer's select menu (see
+// drawComputer/openBossMenu/spawnSelectedBosses in game.js). Order here is
+// the order bosses appear in the menu, navigated with Up/Down.
+const BOSS_LIST = [
+  { type: 'bowser', name: 'Bowser' },
+  { type: 'kingboo', name: 'King Boo' },
+  { type: 'kamek', name: 'Kamek' },
+  { type: 'hammersquad', name: 'the Hammer Squadron' },
+  { type: 'lawyer', name: 'Sy Loophole' },
 ];
 
 const LEVELS = [
@@ -284,14 +300,36 @@ const LEVELS = [
   },
   {
     // Boss-testing arena only, reached via the "0" hotkey - not part of the
-    // normal level progression (see REAL_LEVEL_COUNT). Sy Loophole didn't
-    // fit the game's theme as a real level boss, so he lives here instead
-    // for tuning/testing his attacks in isolation.
+    // normal level progression (see REAL_LEVEL_COUNT). No boss spawns
+    // automatically here anymore - walk up to the computer terminal near
+    // the start and pick one or more from the menu (see openBossMenu/
+    // spawnSelectedBosses in game.js). Sy Loophole (who didn't fit the
+    // game's theme as a real level boss) lives in that menu alongside the
+    // others, for tuning/testing attacks in isolation. There's no
+    // end-level flag here - it's a pure sandbox arena, not something to be
+    // "completed".
     map: bossTestMap,
     theme: 'test',
     isTest: true,
-    bossType: 'lawyer',
-    bossName: 'Sy Loophole',
+    bossType: null,
+    bossName: null,
+    // Spawn right next to the computer terminal (see the 'm' tile in
+    // bossTestMap) so entering the arena drops the player there to pick a
+    // boss immediately, rather than at the generic default (40, 300).
+    spawnX: 160,
+    spawnY: 300,
+    // Checkpoint just past the computer - kept close by so respawning
+    // after a death doesn't mean a long run back to the boss(es).
+    checkpointX: 320,
+    // Bosses picked from the menu spawn anchored here (with no flag to
+    // anchor to in this flagless arena) and spread out rightward by
+    // bossArenaSpacing per additional boss selected, so several can be
+    // fought side by side without overlapping. Far enough past the
+    // checkpoint that even Bowser (whose sprite sits well left of his own
+    // anchor) doesn't spawn right on top of it, but still close by so
+    // retesting after a death is quick.
+    bossArenaX: 900,
+    bossArenaSpacing: 140,
     enemyPositions: [],
   },
 ];

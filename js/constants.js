@@ -21,19 +21,33 @@ const jumpKeys = ['Space', 'ArrowUp'];
 const DOUBLE_TAP_MS = 300;
 let lastTap = { left: 0, right: 0 };
 window.addEventListener('keydown', e => {
-  if (!keys[e.code] && jumpKeys.includes(e.code)) jumpPressed = true;
+  if (!keys[e.code] && jumpKeys.includes(e.code) && !bossMenuOpen) jumpPressed = true;
   if (!keys[e.code] && e.code === 'KeyW') shootPressed = true;
-  if (!keys[e.code] && (e.code === 'ArrowLeft' || e.code === 'KeyA')) {
+  if (!keys[e.code] && (e.code === 'ArrowLeft' || e.code === 'KeyA') && !bossMenuOpen) {
     const now = Date.now();
     if (now - lastTap.left < DOUBLE_TAP_MS) player.sprinting = true;
     lastTap.left = now;
   }
-  if (!keys[e.code] && (e.code === 'ArrowRight' || e.code === 'KeyD')) {
+  if (!keys[e.code] && (e.code === 'ArrowRight' || e.code === 'KeyD') && !bossMenuOpen) {
     const now = Date.now();
     if (now - lastTap.right < DOUBLE_TAP_MS) player.sprinting = true;
     lastTap.right = now;
   }
   keys[e.code] = true;
+  // Boss-testing computer: Enter opens the boss-select menu when standing
+  // near it (or spawns the selected/highlighted boss(es) while the menu is
+  // open), Up/Down navigate the list, Left/Right unselect/select the
+  // highlighted boss for multi-spawn, and Escape backs out without spawning.
+  if (bossMenuOpen) {
+    if (e.code === 'ArrowUp') bossMenuIndex = (bossMenuIndex - 1 + BOSS_LIST.length) % BOSS_LIST.length;
+    if (e.code === 'ArrowDown') bossMenuIndex = (bossMenuIndex + 1) % BOSS_LIST.length;
+    if (e.code === 'ArrowRight') bossMenuSelected.add(bossMenuIndex);
+    if (e.code === 'ArrowLeft') bossMenuSelected.delete(bossMenuIndex);
+    if (e.code === 'Enter') spawnSelectedBosses();
+    if (e.code === 'Escape') closeBossMenu();
+    return;
+  }
+  if (e.code === 'Enter' && !won && lives > 0 && nearComputer()) { openBossMenu(); return; }
   if (e.code === 'KeyR') restart();
   // Level-select hotkeys: N = start of level N, Shift+N = that level's
   // boss checkpoint. 0 = the boss-testing arena (not a real level).
